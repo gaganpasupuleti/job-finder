@@ -3,9 +3,11 @@
 Main entry point for multi-site job scraper.
 
 Usage:
-    python main.py                  # Run with default settings (headless mode)
-    python main.py --headful        # Run with visible browser window
-    python main.py --save-linkedin  # Save LinkedIn authentication state (requires LINKEDIN_USER/LINKEDIN_PASS env vars)
+    python main.py                                  # Run with default settings (headless mode)
+    python main.py --headful                        # Run with visible browser window
+    python main.py --sites amazon,pg                # Scrape only specific sites
+    python main.py --output my_jobs.xlsx            # Save to custom filename
+    python main.py --save-linkedin                  # Save LinkedIn authentication state (requires LINKEDIN_USER/LINKEDIN_PASS env vars)
 """
 
 import sys
@@ -18,6 +20,17 @@ def main():
         '--headful', 
         action='store_true', 
         help='Run browser in headful mode (show window)'
+    )
+    parser.add_argument(
+        '--sites',
+        type=str,
+        help='Comma-separated list of sites to scrape (e.g., amazon,pg_careers,linkedin). Default: all enabled sites'
+    )
+    parser.add_argument(
+        '--output',
+        type=str,
+        default='multi_site_jobs.xlsx',
+        help='Output Excel filename (default: multi_site_jobs.xlsx)'
     )
     parser.add_argument(
         '--save-linkedin', 
@@ -37,19 +50,25 @@ def main():
             print("✗ Failed to save LinkedIn state. Check LINKEDIN_USER and LINKEDIN_PASS env vars.")
         return
     
+    # Parse site filter
+    site_filter = None
+    if args.sites:
+        site_filter = [s.strip() for s in args.sites.split(',')]
+        print(f"Filtering to sites: {', '.join(site_filter)}")
+    
     # Run the multi-site scraper
     headless = not args.headful
     print(f"Starting multi-site job scraper (headless={headless})...")
-    print("Scraping Amazon, P&G Careers, and LinkedIn...\n")
+    print("Scraping Amazon, P&G Careers, and LinkedIn (if enabled)...\n")
     
-    df = run_multi_site_scraper(headless=headless)
+    df = run_multi_site_scraper(headless=headless, site_filter=site_filter, output_file=args.output)
     
     if df is not None:
         print(f"\n✓ Success! Scraped {len(df)} total jobs")
         print(f"  Sources: {', '.join(df['Source'].unique())}")
-        print(f"  Saved to: multi_site_jobs.xlsx\n")
+        print(f"  Saved to: {args.output}\n")
         print("First 5 jobs:")
-        print(df[['Title', 'Location', 'Source']].head().to_string())
+        print(df[['Title', 'Company', 'Location', 'Source']].head().to_string())
     else:
         print("✗ No jobs were scraped. Check logs above.")
         sys.exit(1)
