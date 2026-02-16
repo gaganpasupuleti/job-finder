@@ -30,7 +30,7 @@ def main():
         '--output',
         type=str,
         default='multi_site_jobs.xlsx',
-        help='Output Excel filename (default: multi_site_jobs.xlsx)'
+        help='Output Excel filename (default: multi_site_jobs.xlsx). Must end with .xlsx'
     )
     parser.add_argument(
         '--save-linkedin', 
@@ -39,6 +39,11 @@ def main():
     )
     
     args = parser.parse_args()
+    
+    # Validate output filename
+    if not args.output.endswith('.xlsx'):
+        print("Error: Output filename must end with .xlsx")
+        sys.exit(1)
     
     if args.save_linkedin:
         print("Saving LinkedIn authentication state...")
@@ -54,6 +59,13 @@ def main():
     site_filter = None
     if args.sites:
         site_filter = [s.strip() for s in args.sites.split(',')]
+        # Validate site names
+        valid_sites = ['amazon', 'pg_careers', 'linkedin']
+        invalid_sites = [s for s in site_filter if s not in valid_sites]
+        if invalid_sites:
+            print(f"Error: Invalid site(s): {', '.join(invalid_sites)}")
+            print(f"Valid sites are: {', '.join(valid_sites)}")
+            sys.exit(1)
         print(f"Filtering to sites: {', '.join(site_filter)}")
     
     # Run the multi-site scraper
