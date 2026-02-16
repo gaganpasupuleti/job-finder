@@ -5,6 +5,7 @@ import time
 import json
 import hashlib
 import os
+import re
 from pathlib import Path
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional
@@ -29,9 +30,16 @@ JOB_SCHEMA = ['Job ID', 'Job Link', 'Title', 'Company', 'Location', 'Posted',
               'Minimum Requirements', 'Good to Have', 'Job Description', 
               'Years of Experience', 'Essential Keywords', 'Source']
 
+# Text truncation limits (characters)
+MAX_DESCRIPTION_LENGTH = 1000
+MAX_REQUIREMENTS_LENGTH = 500
+MAX_GOOD_TO_HAVE_LENGTH = 300
+MAX_TITLE_LENGTH = 100
+MAX_POSTED_LENGTH = 100
+MAX_KEYWORDS_COUNT = 15
+
 def extract_years_of_experience(text: str) -> str:
     """Extract years of experience from job text using pattern matching"""
-    import re
     if not text:
         return ''
     
@@ -63,39 +71,50 @@ def extract_years_of_experience(text: str) -> str:
 
 def extract_essential_keywords(text: str, title: str = '') -> str:
     """Extract essential technical keywords and skills from job description"""
-    import re
     if not text:
         return ''
     
     # Combine text sources
-    combined_text = f"{title} {text}".lower()
+    combined_text = f"{title} {text}"
     
-    # Common technical keywords and skills to look for
+    # Common technical keywords and skills to look for (with proper display names)
+    # Format: (pattern, display_name, use_word_boundaries)
     tech_keywords = [
-        # Programming languages
-        'python', 'java', 'javascript', 'typescript', 'c\\+\\+', 'c#', 'ruby', 'go', 'rust', 'php', 'swift', 'kotlin',
+        # Programming languages (special patterns for C++ and C#)
+        ('python', 'Python', True), ('java', 'Java', True), ('javascript', 'JavaScript', True), ('typescript', 'TypeScript', True), 
+        (r'c\+\+', 'C++', False), (r'c#', 'C#', False), ('ruby', 'Ruby', True), (r'\bgo\b', 'Go', False), ('rust', 'Rust', True), 
+        ('php', 'PHP', True), ('swift', 'Swift', True), ('kotlin', 'Kotlin', True),
         # Frameworks/Libraries
-        'react', 'angular', 'vue', 'node\\.?js', 'django', 'flask', 'spring', 'express', 'fastapi',
+        ('react', 'React', True), ('angular', 'Angular', True), ('vue', 'Vue', True), (r'node\.?js', 'Node.js', True), 
+        ('django', 'Django', True), ('flask', 'Flask', True), ('spring', 'Spring', True), ('express', 'Express', True), ('fastapi', 'FastAPI', True),
         # Databases
-        'sql', 'mysql', 'postgresql', 'mongodb', 'redis', 'dynamodb', 'oracle', 'cassandra',
+        ('sql', 'SQL', True), ('mysql', 'MySQL', True), ('postgresql', 'PostgreSQL', True), ('mongodb', 'MongoDB', True), 
+        ('redis', 'Redis', True), ('dynamodb', 'DynamoDB', True), ('oracle', 'Oracle', True), ('cassandra', 'Cassandra', True),
         # Cloud/DevOps
-        'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'jenkins', 'ci/cd', 'terraform', 'ansible',
+        ('aws', 'AWS', True), ('azure', 'Azure', True), ('gcp', 'GCP', True), ('docker', 'Docker', True), 
+        ('kubernetes', 'Kubernetes', True), ('jenkins', 'Jenkins', True), ('ci/cd', 'CI/CD', True), 
+        ('terraform', 'Terraform', True), ('ansible', 'Ansible', True),
         # Data/AI/ML
-        'machine learning', 'deep learning', 'ai', 'data science', 'tensorflow', 'pytorch', 'pandas', 'numpy',
+        ('machine learning', 'Machine Learning', True), ('deep learning', 'Deep Learning', True), (r'\bai\b', 'AI', False), 
+        ('data science', 'Data Science', True), ('tensorflow', 'TensorFlow', True), ('pytorch', 'PyTorch', True), 
+        ('pandas', 'Pandas', True), ('numpy', 'NumPy', True),
         # Other skills
-        'agile', 'scrum', 'git', 'rest api', 'graphql', 'microservices', 'linux', 'bash',
+        ('agile', 'Agile', True), ('scrum', 'Scrum', True), ('git', 'Git', True), ('rest api', 'REST API', True), 
+        ('graphql', 'GraphQL', True), ('microservices', 'Microservices', True), ('linux', 'Linux', True), ('bash', 'Bash', True),
     ]
     
     found_keywords = []
-    for keyword in tech_keywords:
-        if re.search(r'\b' + keyword + r'\b', combined_text):
-            # Capitalize properly
-            clean_keyword = keyword.replace('\\', '').replace('.', '').replace('?', '')
-            found_keywords.append(clean_keyword.upper() if len(clean_keyword) <= 4 else clean_keyword.title())
+    for pattern, display_name, use_word_boundaries in tech_keywords:
+        if use_word_boundaries:
+            regex = r'\b' + pattern + r'\b'
+        else:
+            regex = pattern
+        if re.search(regex, combined_text, re.IGNORECASE):
+            found_keywords.append(display_name)
     
     # Remove duplicates and return comma-separated
     unique_keywords = list(dict.fromkeys(found_keywords))
-    return ', '.join(unique_keywords[:15])  # Limit to top 15 keywords
+    return ', '.join(unique_keywords[:MAX_KEYWORDS_COUNT])  # Limit to configured max keywords
 
 def retry(max_attempts: int = 3, delay: float = 1.0):
     """Retry decorator for functions that may fail temporarily"""
@@ -190,14 +209,14 @@ class JobSiteScraper:
                 if unavailable.is_visible(timeout=3000):
                     logger.warning("Amazon page unavailable (404)")
                     return []
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"No unavailable page indicator found: {e}")
 
             # Wait for job links to appear
             try:
                 self.page.wait_for_selector('a[href*="/jobs/"]', timeout=10000)
-            except Exception:
-                logger.warning("Amazon job links not found")
+            except Exception as e:
+                logger.warning(f"No job links found on Amazon page: {e}")
                 return []
 
             job_elements = self.page.locator('a[href*="/jobs/"]').all()
@@ -229,24 +248,24 @@ class JobSiteScraper:
                         if posted_elem:
                             posted_text = posted_elem.text_content()
                             posted = posted_text.replace('Posted:', '').split('(')[0].strip()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Could not extract posted date: {e}")
                     
                     min_req = ''
                     try:
                         next_p = self.page.locator('h2:has-text("Basic Qualifications") + p').first
                         if next_p:
                             min_req = next_p.text_content().strip()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Could not extract minimum requirements: {e}")
                     
                     good_to_have = ''
                     try:
                         next_p = self.page.locator('h2:has-text("Preferred Qualifications") + p').first
                         if next_p:
                             good_to_have = next_p.text_content().strip()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Could not extract preferred qualifications: {e}")
                     
                     job_description = ''
                     try:
@@ -257,10 +276,12 @@ class JobSiteScraper:
                             job_description = next_elem.strip() if next_elem else ''
                         if not job_description:
                             # Fallback: grab body text
+                            # Note: Using shorter MAX_REQUIREMENTS_LENGTH (500) for fallback to avoid
+                            # overwhelming Excel with too much unstructured text when proper extraction fails
                             body_text = self.page.locator('body').text_content()
-                            job_description = body_text[:500] if body_text else ''
-                    except Exception:
-                        pass
+                            job_description = body_text[:MAX_REQUIREMENTS_LENGTH] if body_text else ''
+                    except Exception as e:
+                        logger.debug(f"Could not extract job description: {e}")
                     
                     jobs_data.append({
                         'Job ID': compute_job_id(link),
@@ -328,9 +349,10 @@ class JobSiteScraper:
                     # Get full page text as fallback
                     if not min_req:
                         try:
-                            page_text = self.page.locator('body').text_content()[:500]
+                            page_text = self.page.locator('body').text_content()[:MAX_REQUIREMENTS_LENGTH]
                             min_req = page_text if page_text else ''
-                        except Exception:
+                        except Exception as e:
+                            logger.debug(f"Could not extract requirements fallback: {e}")
                             min_req = ''
                     
                     good_to_have = ''
@@ -344,21 +366,24 @@ class JobSiteScraper:
                             next_elem = desc_heading.evaluate('(el) => el.nextElementSibling?.textContent || ""')
                             job_description = next_elem.strip() if next_elem else ''
                         if not job_description:
+                            # Fallback: grab body text
+                            # Note: Using shorter MAX_REQUIREMENTS_LENGTH (500) for fallback to avoid
+                            # overwhelming Excel with too much unstructured text when proper extraction fails
                             page_text = self.page.locator('body').text_content()
-                            job_description = page_text[:500] if page_text else ''
-                    except Exception:
-                        pass
+                            job_description = page_text[:MAX_REQUIREMENTS_LENGTH] if page_text else ''
+                    except Exception as e:
+                        logger.debug(f"Could not extract P&G job description: {e}")
                     
                     jobs_data.append({
                         'Job ID': compute_job_id(link),
                         'Job Link': link,
-                        'Title': title[:100] if title else '',
+                        'Title': title[:MAX_TITLE_LENGTH] if title else '',
                         'Company': 'P&G',
                         'Location': location[:150] if location else '',
-                        'Posted': posted[:50] if posted else '',
-                        'Minimum Requirements': min_req[:300] if min_req else '',
+                        'Posted': posted[:MAX_POSTED_LENGTH] if posted else '',
+                        'Minimum Requirements': min_req[:MAX_REQUIREMENTS_LENGTH] if min_req else '',
                         'Good to Have': good_to_have,
-                        'Job Description': job_description[:500] if job_description else '',
+                        'Job Description': job_description[:MAX_DESCRIPTION_LENGTH] if job_description else '',
                         'Years of Experience': extract_years_of_experience(f"{min_req} {job_description}"),
                         'Essential Keywords': extract_essential_keywords(f"{min_req} {job_description}", title),
                         'Source': 'P&G Careers'
@@ -412,8 +437,8 @@ class JobSiteScraper:
                         desc = self.page.locator('div.description__text, div.jobs-description-content__text, div.show-more-less-html__markup').first
                         if desc:
                             job_description = desc.text_content().strip()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Could not extract LinkedIn job description: {e}")
 
                     jobs_data.append({
                         'Job ID': compute_job_id(link),
@@ -424,7 +449,7 @@ class JobSiteScraper:
                         'Posted': posted,
                         'Minimum Requirements': '',
                         'Good to Have': '',
-                        'Job Description': job_description[:1000] if job_description else '',
+                        'Job Description': job_description[:MAX_DESCRIPTION_LENGTH] if job_description else '',
                         'Years of Experience': extract_years_of_experience(job_description),
                         'Essential Keywords': extract_essential_keywords(job_description, title),
                         'Source': 'LinkedIn'
@@ -441,8 +466,8 @@ class JobSiteScraper:
             element = self.page.query_selector(selector)
             if element:
                 return element.inner_text().strip()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not extract from selector '{selector}': {e}")
         return default
 
 
