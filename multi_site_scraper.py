@@ -275,9 +275,9 @@ class JobSiteScraper:
                             next_elem = desc_heading.evaluate('(el) => el.nextElementSibling?.textContent || ""')
                             job_description = next_elem.strip() if next_elem else ''
                         if not job_description:
-                            # Fallback: grab body text
+                            # Fallback: grab body text (truncated to avoid too much noise)
                             body_text = self.page.locator('body').text_content()
-                            job_description = body_text[:MAX_DESCRIPTION_LENGTH] if body_text else ''
+                            job_description = body_text[:MAX_REQUIREMENTS_LENGTH] if body_text else ''
                     except Exception as e:
                         logger.debug(f"Could not extract job description: {e}")
                     
@@ -364,6 +364,7 @@ class JobSiteScraper:
                             next_elem = desc_heading.evaluate('(el) => el.nextElementSibling?.textContent || ""')
                             job_description = next_elem.strip() if next_elem else ''
                         if not job_description:
+                            # Fallback: grab body text (truncated to avoid too much noise)
                             page_text = self.page.locator('body').text_content()
                             job_description = page_text[:MAX_REQUIREMENTS_LENGTH] if page_text else ''
                     except Exception as e:
