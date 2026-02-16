@@ -34,6 +34,7 @@ JOB_SCHEMA = ['Job ID', 'Job Link', 'Title', 'Company', 'Location', 'Posted',
 MAX_DESCRIPTION_LENGTH = 1000
 MAX_REQUIREMENTS_LENGTH = 500
 MAX_GOOD_TO_HAVE_LENGTH = 300
+MAX_TITLE_LENGTH = 100
 MAX_POSTED_LENGTH = 100
 MAX_KEYWORDS_COUNT = 15
 
@@ -216,7 +217,6 @@ class JobSiteScraper:
                 self.page.wait_for_selector('a[href*="/jobs/"]', timeout=10000)
             except Exception as e:
                 logger.warning(f"No job links found on Amazon page: {e}")
-                logger.warning("Amazon job links not found")
                 return []
 
             job_elements = self.page.locator('a[href*="/jobs/"]').all()
@@ -372,13 +372,13 @@ class JobSiteScraper:
                     jobs_data.append({
                         'Job ID': compute_job_id(link),
                         'Job Link': link,
-                        'Title': title[:MAX_POSTED_LENGTH] if title else '',
+                        'Title': title[:MAX_TITLE_LENGTH] if title else '',
                         'Company': 'P&G',
                         'Location': location[:150] if location else '',
                         'Posted': posted[:MAX_POSTED_LENGTH] if posted else '',
-                        'Minimum Requirements': min_req[:MAX_GOOD_TO_HAVE_LENGTH] if min_req else '',
+                        'Minimum Requirements': min_req[:MAX_REQUIREMENTS_LENGTH] if min_req else '',
                         'Good to Have': good_to_have,
-                        'Job Description': job_description[:MAX_REQUIREMENTS_LENGTH] if job_description else '',
+                        'Job Description': job_description[:MAX_DESCRIPTION_LENGTH] if job_description else '',
                         'Years of Experience': extract_years_of_experience(f"{min_req} {job_description}"),
                         'Essential Keywords': extract_essential_keywords(f"{min_req} {job_description}", title),
                         'Source': 'P&G Careers'
