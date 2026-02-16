@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional
+from datetime import datetime
+import traceback
 
 try:
     from supabase import create_client
@@ -21,6 +23,79 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Standard job schema to ensure consistency across all scrapers
+JOB_SCHEMA = ['Job ID', 'Job Link', 'Title', 'Company', 'Location', 'Posted', 
+              'Minimum Requirements', 'Good to Have', 'Job Description', 
+              'Years of Experience', 'Essential Keywords', 'Source']
+
+def extract_years_of_experience(text: str) -> str:
+    """Extract years of experience from job text using pattern matching"""
+    import re
+    if not text:
+        return ''
+    
+    # Common patterns for years of experience
+    patterns = [
+        r'(\d+)\+?\s*(?:to|\-|–)\s*(\d+)\+?\s*years?(?:\s+of)?\s+(?:experience|exp)',
+        r'(\d+)\+?\s*years?(?:\s+of)?\s+(?:experience|exp)',
+        r'minimum\s+(\d+)\s*years?',
+        r'at least\s+(\d+)\s*years?',
+        r'(\d+)\s*yrs',
+    ]
+    
+    matches = []
+    for pattern in patterns:
+        found = re.findall(pattern, text.lower())
+        if found:
+            matches.extend(found)
+    
+    if not matches:
+        return ''
+    
+    # Return the first match or range found
+    if isinstance(matches[0], tuple):
+        # Range found (e.g., "3-5 years")
+        return '-'.join(str(x) for x in matches[0] if x)
+    else:
+        # Single value found
+        return str(matches[0])
+
+def extract_essential_keywords(text: str, title: str = '') -> str:
+    """Extract essential technical keywords and skills from job description"""
+    import re
+    if not text:
+        return ''
+    
+    # Combine text sources
+    combined_text = f"{title} {text}".lower()
+    
+    # Common technical keywords and skills to look for
+    tech_keywords = [
+        # Programming languages
+        'python', 'java', 'javascript', 'typescript', 'c\\+\\+', 'c#', 'ruby', 'go', 'rust', 'php', 'swift', 'kotlin',
+        # Frameworks/Libraries
+        'react', 'angular', 'vue', 'node\\.?js', 'django', 'flask', 'spring', 'express', 'fastapi',
+        # Databases
+        'sql', 'mysql', 'postgresql', 'mongodb', 'redis', 'dynamodb', 'oracle', 'cassandra',
+        # Cloud/DevOps
+        'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'jenkins', 'ci/cd', 'terraform', 'ansible',
+        # Data/AI/ML
+        'machine learning', 'deep learning', 'ai', 'data science', 'tensorflow', 'pytorch', 'pandas', 'numpy',
+        # Other skills
+        'agile', 'scrum', 'git', 'rest api', 'graphql', 'microservices', 'linux', 'bash',
+    ]
+    
+    found_keywords = []
+    for keyword in tech_keywords:
+        if re.search(r'\b' + keyword + r'\b', combined_text):
+            # Capitalize properly
+            clean_keyword = keyword.replace('\\', '').replace('.', '').replace('?', '')
+            found_keywords.append(clean_keyword.upper() if len(clean_keyword) <= 4 else clean_keyword.title())
+    
+    # Remove duplicates and return comma-separated
+    unique_keywords = list(dict.fromkeys(found_keywords))
+    return ', '.join(unique_keywords[:15])  # Limit to top 15 keywords
 
 def retry(max_attempts: int = 3, delay: float = 1.0):
     """Retry decorator for functions that may fail temporarily"""
@@ -47,6 +122,7 @@ class JobSiteScraper:
         self.browser = None
         self.context = None
         self.page = None
+        self.p = None  # Initialize Playwright instance to avoid AttributeError in close_browser
     
     def start_browser(self, headless=True, storage_state: Optional[str] = None):
         """Start Playwright browser (optionally load storage_state for authenticated sessions)"""
@@ -153,7 +229,7 @@ class JobSiteScraper:
                         if posted_elem:
                             posted_text = posted_elem.text_content()
                             posted = posted_text.replace('Posted:', '').split('(')[0].strip()
-                    except:
+                    except Exception:
                         pass
                     
                     min_req = ''
@@ -161,7 +237,7 @@ class JobSiteScraper:
                         next_p = self.page.locator('h2:has-text("Basic Qualifications") + p').first
                         if next_p:
                             min_req = next_p.text_content().strip()
-                    except:
+                    except Exception:
                         pass
                     
                     good_to_have = ''
@@ -169,7 +245,7 @@ class JobSiteScraper:
                         next_p = self.page.locator('h2:has-text("Preferred Qualifications") + p').first
                         if next_p:
                             good_to_have = next_p.text_content().strip()
-                    except:
+                    except Exception:
                         pass
                     
                     job_description = ''
@@ -183,18 +259,21 @@ class JobSiteScraper:
                             # Fallback: grab body text
                             body_text = self.page.locator('body').text_content()
                             job_description = body_text[:500] if body_text else ''
-                    except:
+                    except Exception:
                         pass
                     
                     jobs_data.append({
                         'Job ID': compute_job_id(link),
                         'Job Link': link,
                         'Title': title,
+                        'Company': 'Amazon',
                         'Location': location,
                         'Posted': posted,
                         'Minimum Requirements': min_req,
                         'Good to Have': good_to_have,
                         'Job Description': job_description[:500] if job_description else '',
+                        'Years of Experience': extract_years_of_experience(f"{min_req} {good_to_have} {job_description}"),
+                        'Essential Keywords': extract_essential_keywords(f"{min_req} {good_to_have} {job_description}", title),
                         'Source': 'Amazon'
                     })
                 except Exception as e:
@@ -251,7 +330,7 @@ class JobSiteScraper:
                         try:
                             page_text = self.page.locator('body').text_content()[:500]
                             min_req = page_text if page_text else ''
-                        except:
+                        except Exception:
                             min_req = ''
                     
                     good_to_have = ''
@@ -267,18 +346,21 @@ class JobSiteScraper:
                         if not job_description:
                             page_text = self.page.locator('body').text_content()
                             job_description = page_text[:500] if page_text else ''
-                    except:
+                    except Exception:
                         pass
                     
                     jobs_data.append({
                         'Job ID': compute_job_id(link),
                         'Job Link': link,
                         'Title': title[:100] if title else '',
+                        'Company': 'P&G',
                         'Location': location[:150] if location else '',
                         'Posted': posted[:50] if posted else '',
                         'Minimum Requirements': min_req[:300] if min_req else '',
                         'Good to Have': good_to_have,
                         'Job Description': job_description[:500] if job_description else '',
+                        'Years of Experience': extract_years_of_experience(f"{min_req} {job_description}"),
+                        'Essential Keywords': extract_essential_keywords(f"{min_req} {job_description}", title),
                         'Source': 'P&G Careers'
                     })
                     
@@ -330,7 +412,7 @@ class JobSiteScraper:
                         desc = self.page.locator('div.description__text, div.jobs-description-content__text, div.show-more-less-html__markup').first
                         if desc:
                             job_description = desc.text_content().strip()
-                    except:
+                    except Exception:
                         pass
 
                     jobs_data.append({
@@ -343,6 +425,8 @@ class JobSiteScraper:
                         'Minimum Requirements': '',
                         'Good to Have': '',
                         'Job Description': job_description[:1000] if job_description else '',
+                        'Years of Experience': extract_years_of_experience(job_description),
+                        'Essential Keywords': extract_essential_keywords(job_description, title),
                         'Source': 'LinkedIn'
                     })
                 except Exception as e:
@@ -357,7 +441,7 @@ class JobSiteScraper:
             element = self.page.query_selector(selector)
             if element:
                 return element.inner_text().strip()
-        except:
+        except Exception:
             pass
         return default
 
@@ -436,30 +520,66 @@ def upsert_jobs_to_supabase(client: object, jobs_df: pd.DataFrame) -> None:
         return
     
     try:
+        # Add timestamp to all records
+        timestamp = datetime.utcnow().isoformat()
+        
         rows = []
         for _, row in jobs_df.iterrows():
             rows.append({
                 'job_id': str(row.get('Job ID', '')),
                 'job_link': str(row.get('Job Link', '')),
                 'title': str(row.get('Title', '')),
+                'company': str(row.get('Company', '')),
                 'location': str(row.get('Location', '')),
                 'posted': str(row.get('Posted', '')),
                 'minimum_requirements': str(row.get('Minimum Requirements', '')),
                 'good_to_have': str(row.get('Good to Have', '')),
                 'job_description': str(row.get('Job Description', '')),
-                'source': str(row.get('Source', ''))
+                'years_of_experience': str(row.get('Years of Experience', '')),
+                'essential_keywords': str(row.get('Essential Keywords', '')),
+                'source': str(row.get('Source', '')),
+                'scraped_at': timestamp
             })
         
-        response = client.table('jobs').upsert(rows, returning='minimal').execute()
-        logger.info(f"Upserted {len(rows)} jobs to Supabase")
+        # Batch upserts to avoid timeouts (50 rows at a time)
+        batch_size = 50
+        total_rows = len(rows)
+        
+        for i in range(0, total_rows, batch_size):
+            batch = rows[i:i + batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = (total_rows + batch_size - 1) // batch_size
+            
+            try:
+                response = client.table('jobs').upsert(
+                    batch, 
+                    on_conflict='job_id',
+                    returning='minimal'
+                ).execute()
+                logger.info(f"Upserted batch {batch_num}/{total_batches} ({len(batch)} rows) to Supabase")
+                
+                # Small delay between batches to avoid rate limits
+                if i + batch_size < total_rows:
+                    time.sleep(0.5)
+                    
+            except Exception as batch_error:
+                logger.error(f"Failed to upsert batch {batch_num} ({len(batch)} rows) to Supabase")
+                logger.error(f"Error details: {str(batch_error)}")
+                logger.error(f"Traceback:\n{traceback.format_exc()}")
+        
+        logger.info(f"Successfully upserted {total_rows} jobs to Supabase in {total_batches} batches")
+        
     except Exception as e:
-        logger.error(f"Failed to upsert jobs to Supabase: {e}")
+        logger.error(f"Failed to upsert jobs to Supabase: {str(e)}")
+        logger.error(f"Traceback:\n{traceback.format_exc()}")
 
-def run_multi_site_scraper(headless: bool = True):
+def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str]] = None, output_file: str = 'multi_site_jobs.xlsx'):
     """Scrape multiple job sites
     
     Args:
         headless: Run browser in headless mode (default True)
+        site_filter: Optional list of site types to scrape (e.g., ['amazon', 'pg_careers'])
+        output_file: Output Excel filename (default 'multi_site_jobs.xlsx')
     """
     
     sites = [
@@ -479,16 +599,21 @@ def run_multi_site_scraper(headless: bool = True):
             'name': 'LinkedIn Jobs',
             'type': 'linkedin',
             'url': 'https://www.linkedin.com/jobs/search/?keywords=software%20engineer&location=India',
-            'enabled': True,
+            'enabled': False,  # Disabled until auth flow is finalized
             'storage_state': 'linkedin_state.json'  # set to your saved storage state file if you need authenticated access
         },
-        ]
+    ]
 
     all_jobs = []
 
     for site in sites:
         if not site.get('enabled', True):
             logger.info(f"Skipping {site['name']} (disabled)")
+            continue
+        
+        # Apply site filter if provided
+        if site_filter and site['type'] not in site_filter:
+            logger.info(f"Skipping {site['name']} (not in filter)")
             continue
         
         logger.info(f"\n{'='*60}")
@@ -498,6 +623,12 @@ def run_multi_site_scraper(headless: bool = True):
         scraper = JobSiteScraper(site)
         try:
             storage_state = site.get('storage_state')
+            
+            # Check if storage_state file exists before passing it
+            if storage_state and not os.path.exists(storage_state):
+                logger.warning(f"Storage state file '{storage_state}' not found for {site['name']}, proceeding without authentication")
+                storage_state = None
+            
             scraper.start_browser(headless=headless, storage_state=storage_state)
             jobs = scraper.scrape(site['url'])
             # Filter valid jobs
@@ -514,11 +645,17 @@ def run_multi_site_scraper(headless: bool = True):
         return None
 
     new_df = pd.DataFrame(all_jobs).astype(str)
-    output_file = Path('multi_site_jobs.xlsx')
+    
+    # Ensure all columns from JOB_SCHEMA are present
+    for col in JOB_SCHEMA:
+        if col not in new_df.columns:
+            new_df[col] = ''
+    
+    output_path = Path(output_file)
 
-    if output_file.exists():
+    if output_path.exists():
         try:
-            existing_df = pd.read_excel(output_file).astype(str)
+            existing_df = pd.read_excel(output_path).astype(str)
         except Exception as e:
             logger.error(f"Failed to read existing Excel: {e}")
             existing_df = pd.DataFrame()
@@ -529,6 +666,12 @@ def run_multi_site_scraper(headless: bool = True):
     if not existing_df.empty:
         if 'Job ID' not in existing_df.columns:
             existing_df['Job ID'] = existing_df['Job Link'].apply(compute_job_id)
+        
+        # Ensure all columns from JOB_SCHEMA are present
+        for col in JOB_SCHEMA:
+            if col not in existing_df.columns:
+                existing_df[col] = ''
+        
         existing_df.set_index('Job ID', inplace=True, drop=False)
 
     # Prepare new data
@@ -551,11 +694,24 @@ def run_multi_site_scraper(headless: bool = True):
         merged_df.update(new_df.loc[overlap_ids])
         # Append new rows
         merged_df = pd.concat([merged_df, added_df])
+    
+    # Fill NaN values with empty strings to avoid schema mismatches
+    merged_df = merged_df.fillna('')
+    
+    # Ensure all columns from JOB_SCHEMA are present in the final output
+    for col in JOB_SCHEMA:
+        if col not in merged_df.columns:
+            merged_df[col] = ''
 
-    # Save to Excel
+    # Save to Excel with columns in schema order
     merged_df.reset_index(drop=True, inplace=True)
-    merged_df.to_excel(output_file, index=False)
-    logger.info(f"\nSaved {len(merged_df)} total jobs to {output_file} (added {added}, updated {updated})")
+    # Reorder columns to match JOB_SCHEMA, keep any extra columns at the end
+    ordered_cols = [col for col in JOB_SCHEMA if col in merged_df.columns]
+    extra_cols = [col for col in merged_df.columns if col not in JOB_SCHEMA]
+    merged_df = merged_df[ordered_cols + extra_cols]
+    
+    merged_df.to_excel(output_path, index=False)
+    logger.info(f"\nSaved {len(merged_df)} total jobs to {output_path} (added {added}, updated {updated})")
     
     # Sync to Supabase
     supabase_client = get_supabase_client()
