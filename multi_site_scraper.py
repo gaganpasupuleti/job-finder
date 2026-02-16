@@ -5,11 +5,23 @@ import time
 import json
 import hashlib
 import os
+from urllib.parse import unquote
 from pathlib import Path
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional
 from datetime import datetime
 import traceback
+import re
+from urllib.parse import urlparse
+
+FILTER_PROFILE_CACHE_FILE = 'site_filter_profiles.json'
+
+DEFAULT_GENERIC_FILTERS = {
+    'include_patterns': ['/job', '/jobs', '/search', 'workdayjobs', 'greenhouse.io', 'lever.co'],
+    'exclude_patterns': ['/about', '/blog', '/news', '/event', '/privacy', '/terms', '/contact', '/investor'],
+    'title_must_contain': [],
+    'max_jobs': 20
+}
 
 try:
     from supabase import create_client
@@ -30,36 +42,35 @@ JOB_SCHEMA = ['Job ID', 'Job Link', 'Title', 'Company', 'Location', 'Posted',
               'Years of Experience', 'Essential Keywords', 'Source']
 
 def extract_years_of_experience(text: str) -> str:
-    """Extract years of experience from job text using pattern matching"""
+    """Extract minimum numeric years of experience from job text"""
     import re
     if not text:
         return ''
-    
-    # Common patterns for years of experience
-    patterns = [
-        r'(\d+)\+?\s*(?:to|\-|–)\s*(\d+)\+?\s*years?(?:\s+of)?\s+(?:experience|exp)',
-        r'(\d+)\+?\s*years?(?:\s+of)?\s+(?:experience|exp)',
-        r'minimum\s+(\d+)\s*years?',
-        r'at least\s+(\d+)\s*years?',
-        r'(\d+)\s*yrs',
+
+    normalized = re.sub(r'\s+', ' ', text.lower())
+
+    # Prefer explicit ranges tied to experience context (return minimum numeric value)
+    range_match = re.search(
+        r'(\d{1,2})\s*\+?\s*(?:to|\-|–)\s*(\d{1,2})\s*\+?\s*years?\s*(?:of\s*)?(?:relevant\s*)?(?:professional\s*)?(?:work\s*)?(?:experience|exp)',
+        normalized
+    )
+    if range_match:
+        return str(int(range_match.group(1)))
+
+    # Match expressions like "minimum of 3+ years of experience", "at least 5 yrs exp"
+    single_patterns = [
+        r'(?:minimum(?:\s+of)?|at\s+least|over|more\s+than)?\s*(\d{1,2})\s*\+?\s*years?\s*(?:of\s*)?(?:relevant\s*)?(?:professional\s*)?(?:work\s*)?(?:experience|exp)',
+        r'(\d{1,2})\s*\+?\s*yrs?\s*(?:of\s*)?(?:relevant\s*)?(?:professional\s*)?(?:work\s*)?(?:experience|exp)',
+        r'(?:experience|exp)\s*(?:of\s*)?(\d{1,2})\s*\+?\s*years?'
     ]
-    
-    matches = []
-    for pattern in patterns:
-        found = re.findall(pattern, text.lower())
-        if found:
-            matches.extend(found)
-    
-    if not matches:
-        return ''
-    
-    # Return the first match or range found
-    if isinstance(matches[0], tuple):
-        # Range found (e.g., "3-5 years")
-        return '-'.join(str(x) for x in matches[0] if x)
-    else:
-        # Single value found
-        return str(matches[0])
+
+    for pattern in single_patterns:
+        for match in re.finditer(pattern, normalized):
+            value = int(match.group(1))
+            if 0 < value <= 40:
+                return str(value)
+
+    return ''
 
 def extract_essential_keywords(text: str, title: str = '') -> str:
     """Extract essential technical keywords and skills from job description"""
@@ -96,6 +107,191 @@ def extract_essential_keywords(text: str, title: str = '') -> str:
     # Remove duplicates and return comma-separated
     unique_keywords = list(dict.fromkeys(found_keywords))
     return ', '.join(unique_keywords[:15])  # Limit to top 15 keywords
+
+
+def normalize_site_type(site_type: str) -> str:
+    """Normalize site type and fallback unsupported types to generic."""
+    supported = {'amazon', 'pg_careers', 'linkedin', 'generic'}
+    normalized = (site_type or '').strip().lower()
+    return normalized if normalized in supported else 'generic'
+
+
+def derive_name_from_url(url: str) -> str:
+    """Build a readable site name from URL host."""
+    host = urlparse(url).netloc.lower().replace('www.', '')
+    if not host:
+        return 'External Careers'
+
+    parts = host.split('.')
+    base_part = parts[0] if parts else host
+    if base_part in ('careers', 'career', 'jobs', 'job') and len(parts) > 1:
+        base_part = parts[1]
+
+    root = base_part.replace('-', ' ').replace('_', ' ').strip()
+    return root.title() + ' Careers'
+
+
+def extract_urls_from_pdf(pdf_path: str) -> List[str]:
+    """Extract unique career-site URLs from a PDF file."""
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        logger.warning("pypdf not installed; cannot parse PDF sites file. Install with: pip install pypdf")
+        return []
+
+    try:
+        reader = PdfReader(pdf_path)
+        text_chunks = []
+        for page in reader.pages:
+            text_chunks.append(page.extract_text() or '')
+        text = ' '.join(text_chunks)
+    except Exception as e:
+        logger.error(f"Failed to parse PDF sites file '{pdf_path}': {e}")
+        return []
+
+    candidates = re.findall(r'https?://[^\s\]\[\)\("\'<>]+', text)
+    cleaned = []
+    for url in candidates:
+        normalized = url.strip().rstrip('.,;:')
+        if normalized:
+            cleaned.append(normalized)
+
+    # Preserve order and uniqueness
+    return list(dict.fromkeys(cleaned))
+
+
+def load_additional_sites(sites_file: str) -> List[Dict]:
+    """Load additional site configs from CSV/XLSX/JSON."""
+    if not sites_file:
+        return []
+
+    file_path = Path(sites_file)
+    if not file_path.exists():
+        logger.warning(f"Sites file not found: {sites_file}")
+        return []
+
+    suffix = file_path.suffix.lower()
+
+    if suffix == '.pdf':
+        logger.warning(
+            f"PDF is not supported directly for --sites-file: {sites_file}. "
+            "Extract URLs first using --extract-sites-pdf and then pass the generated JSON file to --sites-file."
+        )
+        return []
+
+    try:
+        if suffix == '.csv':
+            raw_df = pd.read_csv(file_path)
+        elif suffix in ('.xlsx', '.xls'):
+            raw_df = pd.read_excel(file_path)
+        elif suffix == '.json':
+            raw_df = pd.DataFrame(json.loads(file_path.read_text(encoding='utf-8')))
+        else:
+            logger.warning(f"Unsupported sites file format: {sites_file}. Use CSV, XLSX, or JSON")
+            return []
+    except Exception as e:
+        logger.error(f"Failed to read sites file '{sites_file}': {e}")
+        return []
+
+    if raw_df.empty:
+        logger.warning(f"Sites file '{sites_file}' is empty")
+        return []
+
+    normalized_cols = {str(col).strip().lower(): col for col in raw_df.columns}
+
+    def pick_col(*names: str) -> Optional[str]:
+        for name in names:
+            if name in normalized_cols:
+                return normalized_cols[name]
+        return None
+
+    name_col = pick_col('name', 'company', 'company_name')
+    url_col = pick_col('url', 'career_url', 'careers_url', 'site', 'website', 'link')
+    type_col = pick_col('type', 'site_type')
+    enabled_col = pick_col('enabled', 'is_enabled', 'active')
+
+    if not url_col:
+        logger.warning(f"Sites file '{sites_file}' is missing URL column (expected: url/career_url/careers_url/site)")
+        return []
+
+    sites: List[Dict] = []
+    for _, row in raw_df.iterrows():
+        raw_url = str(row.get(url_col, '')).strip()
+        if not raw_url or raw_url.lower() in ('nan', 'none'):
+            continue
+
+        url = raw_url if raw_url.startswith(('http://', 'https://')) else f"https://{raw_url}"
+        site_name = str(row.get(name_col, '')).strip() if name_col else ''
+        if not site_name or site_name.lower() in ('nan', 'none'):
+            site_name = derive_name_from_url(url)
+
+        site_type = normalize_site_type(str(row.get(type_col, '')).strip() if type_col else 'generic')
+
+        enabled = True
+        if enabled_col:
+            enabled_value = str(row.get(enabled_col, 'true')).strip().lower()
+            enabled = enabled_value in ('1', 'true', 'yes', 'y')
+
+        sites.append({
+            'name': site_name,
+            'type': site_type,
+            'url': url,
+            'enabled': enabled
+        })
+
+    logger.info(f"Loaded {len(sites)} additional sites from {sites_file}")
+    return sites
+
+
+def export_sites_from_pdf(pdf_path: str, output_file: str = 'extracted_company_sites.json') -> int:
+    """Extract site URLs from PDF and save them to JSON as generic site configs."""
+    urls = extract_urls_from_pdf(pdf_path)
+    if not urls:
+        return 0
+
+    sites = [
+        {
+            'name': derive_name_from_url(url),
+            'type': 'generic',
+            'url': url,
+            'enabled': True
+        }
+        for url in urls
+    ]
+
+    output_path = Path(output_file)
+    output_path.write_text(json.dumps(sites, indent=2), encoding='utf-8')
+    logger.info(f"Saved {len(sites)} extracted sites to {output_path}")
+    return len(sites)
+
+
+def get_site_profile_key(url: str) -> str:
+    """Stable key for per-site filter profile cache."""
+    parsed = urlparse(url)
+    return parsed.netloc.lower().replace('www.', '').strip()
+
+
+def load_filter_profiles(cache_file: str = FILTER_PROFILE_CACHE_FILE) -> Dict[str, Dict]:
+    """Load cached per-site filter profiles."""
+    path = Path(cache_file)
+    if not path.exists():
+        return {}
+
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+        return data if isinstance(data, dict) else {}
+    except Exception as e:
+        logger.warning(f"Failed to read filter profile cache '{cache_file}': {e}")
+        return {}
+
+
+def save_filter_profiles(profiles: Dict[str, Dict], cache_file: str = FILTER_PROFILE_CACHE_FILE) -> None:
+    """Persist per-site filter profiles for future runs."""
+    try:
+        Path(cache_file).write_text(json.dumps(profiles, indent=2), encoding='utf-8')
+        logger.info(f"Saved filter profiles to {cache_file}")
+    except Exception as e:
+        logger.warning(f"Failed to write filter profile cache '{cache_file}': {e}")
 
 def retry(max_attempts: int = 3, delay: float = 1.0):
     """Retry decorator for functions that may fail temporarily"""
@@ -313,17 +509,39 @@ class JobSiteScraper:
                     
                     # Navigate to job page
                     self.page.goto(link, wait_until="domcontentloaded", timeout=15000)
+                    try:
+                        self.page.wait_for_selector('h1, title, meta[property="og:title"]', timeout=5000)
+                    except Exception:
+                        pass
                     
                     # Extract from job detail page
                     title = self.safe_extract('h1', default='')
                     if not title:
                         title = self.safe_extract('[class*="title"]', default='')
+                    if not title:
+                        title = self.page.eval_on_selector('meta[property="og:title"]', 'el => el.content') or ''
+                    if not title:
+                        title = self.page.title() or ''
+                    if title:
+                        title = title.split('|')[0].split('- P&G Careers')[0].strip()
+                    if not title:
+                        slug = unquote(link.rstrip('/').split('/')[-1])
+                        title = slug.replace('-', ' ').strip()
                     
                     location = self.safe_extract('[class*="location"]', default='')
                     posted = self.safe_extract('[class*="posted"], [class*="date"]', default='')
                     
-                    # Try to get requirements
+                    # Try to get requirements / must-have section first
                     min_req = self.safe_extract('[class*="requirement"], [class*="qualification"]', default='')
+                    if not min_req:
+                        min_req = self.extract_section_from_body([
+                            'job qualifications',
+                            'qualifications',
+                            'must have',
+                            'what we are looking for',
+                            'requirements',
+                            'minimum qualifications'
+                        ])
                     
                     # Get full page text as fallback
                     if not min_req:
@@ -349,6 +567,10 @@ class JobSiteScraper:
                     except Exception:
                         pass
                     
+                    years_of_experience = extract_years_of_experience(min_req)
+                    if not years_of_experience:
+                        years_of_experience = extract_years_of_experience(f"{min_req} {job_description}")
+
                     jobs_data.append({
                         'Job ID': compute_job_id(link),
                         'Job Link': link,
@@ -359,7 +581,7 @@ class JobSiteScraper:
                         'Minimum Requirements': min_req[:300] if min_req else '',
                         'Good to Have': good_to_have,
                         'Job Description': job_description[:500] if job_description else '',
-                        'Years of Experience': extract_years_of_experience(f"{min_req} {job_description}"),
+                        'Years of Experience': years_of_experience,
                         'Essential Keywords': extract_essential_keywords(f"{min_req} {job_description}", title),
                         'Source': 'P&G Careers'
                     })
@@ -434,6 +656,213 @@ class JobSiteScraper:
         except Exception as e:
             logger.error(f"Error in LinkedIn extraction: {e}")
         return jobs_data
+
+    @retry(max_attempts=2, delay=3.0)
+    def extract_from_generic(self) -> List[Dict]:
+        """Generic extractor for external career sites loaded from files."""
+        logger.info("Using generic extraction method")
+        jobs_data = []
+
+        try:
+            self.page.wait_for_timeout(2500)
+
+            candidate_selectors = [
+                'a[href*="/job"]',
+                'a[href*="/jobs"]',
+                'a[href*="/search"]',
+                'a[href*="/careers"]',
+                'a[href*="greenhouse.io"]',
+                'a[href*="lever.co"]',
+                'a[href*="workday"]'
+            ]
+
+            links: List[str] = []
+            for selector in candidate_selectors:
+                try:
+                    extracted = self.page.eval_on_selector_all(
+                        selector,
+                        'elements => [...new Set(elements.map(e => e.href).filter(Boolean))]'
+                    )
+                    links.extend(extracted)
+                except Exception:
+                    continue
+
+            unique_links = []
+            for link in links:
+                if not isinstance(link, str):
+                    continue
+                normalized = link.strip()
+                if not normalized.startswith('http'):
+                    continue
+                if normalized not in unique_links:
+                    unique_links.append(normalized)
+
+            logger.info(f"Found {len(unique_links)} generic job links")
+
+            filters = self.config.get('filters')
+            if not filters and self.config.get('auto_analyze_filters', True):
+                filters = self.infer_generic_filters(unique_links)
+                self.config['filters'] = filters
+                self.config['inferred_filters'] = filters
+                logger.info(
+                    f"Inferred filters for {self.config.get('name', 'site')}: "
+                    f"include={filters.get('include_patterns', [])}, "
+                    f"exclude={filters.get('exclude_patterns', [])}, "
+                    f"max_jobs={filters.get('max_jobs', 20)}"
+                )
+
+            filtered_links = self.apply_generic_filters(unique_links, filters)
+            logger.info(f"Filtered generic links: {len(filtered_links)} (from {len(unique_links)} candidates)")
+
+            # Expand listing pages (e.g., /search, /jobs) to concrete job detail links
+            expanded_links = self.expand_listing_links(filtered_links)
+            scrape_links = expanded_links if expanded_links else filtered_links
+            if expanded_links:
+                logger.info(f"Expanded to {len(expanded_links)} job-detail links from listing pages")
+
+            for idx, link in enumerate(scrape_links, 1):
+                try:
+                    logger.info(f"Processing generic job {idx}/{len(scrape_links)}")
+                    self.page.goto(link, wait_until='domcontentloaded', timeout=15000)
+
+                    title = self.safe_extract('h1', default='')
+                    if not title:
+                        page_title = self.page.title() or ''
+                        title = page_title.split('|')[0].split('-')[0].strip()
+                    if not title:
+                        title = unquote(link.rstrip('/').split('/')[-1]).replace('-', ' ').strip()
+
+                    location = self.safe_extract('[class*="location"], [data-testid*="location"]', default='')
+                    posted = self.safe_extract('[class*="posted"], [class*="date"], time', default='')
+
+                    min_req = self.extract_section_from_body([
+                        'minimum qualifications',
+                        'basic qualifications',
+                        'requirements',
+                        'must have',
+                        'job qualifications'
+                    ])
+
+                    job_description = ''
+                    try:
+                        body_text = self.page.locator('body').text_content() or ''
+                        job_description = ' '.join(body_text.split())[:800]
+                    except Exception:
+                        pass
+
+                    years_of_experience = extract_years_of_experience(min_req)
+                    if not years_of_experience:
+                        years_of_experience = extract_years_of_experience(job_description)
+
+                    jobs_data.append({
+                        'Job ID': compute_job_id(link),
+                        'Job Link': link,
+                        'Title': title[:120] if title else '',
+                        'Company': self.config.get('name', 'External Company').replace(' Careers', ''),
+                        'Location': location[:150] if location else '',
+                        'Posted': posted[:60] if posted else '',
+                        'Minimum Requirements': min_req[:350] if min_req else '',
+                        'Good to Have': '',
+                        'Job Description': job_description,
+                        'Years of Experience': years_of_experience,
+                        'Essential Keywords': extract_essential_keywords(f"{min_req} {job_description}", title),
+                        'Source': self.config.get('name', 'External Careers')
+                    })
+                except Exception as e:
+                    logger.error(f"Error extracting generic job {idx}: {str(e)[:100]}")
+
+        except Exception as e:
+            logger.error(f"Error in generic extraction: {e}")
+
+        return jobs_data
+
+    def infer_generic_filters(self, links: List[str]) -> Dict:
+        """Infer site-specific link filters from first-run link candidates."""
+        include_hints = [
+            '/job/', '/jobs/', '/job?', '/jobs?',
+            '/search/', '/search?',
+            'workdayjobs', 'greenhouse.io', 'lever.co', 'smartrecruiters', 'icims.com'
+        ]
+
+        include_patterns: List[str] = []
+        links_lower = [link.lower() for link in links]
+
+        for hint in include_hints:
+            if any(hint in link for link in links_lower):
+                include_patterns.append(hint)
+
+        inferred = {
+            'include_patterns': include_patterns or DEFAULT_GENERIC_FILTERS['include_patterns'],
+            'exclude_patterns': list(DEFAULT_GENERIC_FILTERS['exclude_patterns']),
+            'title_must_contain': [],
+            'max_jobs': DEFAULT_GENERIC_FILTERS['max_jobs']
+        }
+        return inferred
+
+    def apply_generic_filters(self, links: List[str], filters: Optional[Dict]) -> List[str]:
+        """Apply per-site include/exclude filters to candidate links."""
+        if not links:
+            return []
+
+        effective_filters = filters or DEFAULT_GENERIC_FILTERS
+        include_patterns = [str(p).lower() for p in effective_filters.get('include_patterns', []) if str(p).strip()]
+        exclude_patterns = [str(p).lower() for p in effective_filters.get('exclude_patterns', []) if str(p).strip()]
+        max_jobs_raw = effective_filters.get('max_jobs', DEFAULT_GENERIC_FILTERS['max_jobs'])
+
+        try:
+            max_jobs = int(max_jobs_raw)
+        except Exception:
+            max_jobs = DEFAULT_GENERIC_FILTERS['max_jobs']
+
+        filtered: List[str] = []
+        for link in links:
+            lower_link = link.lower()
+
+            if include_patterns and not any(pattern in lower_link for pattern in include_patterns):
+                continue
+            if exclude_patterns and any(pattern in lower_link for pattern in exclude_patterns):
+                continue
+
+            path = urlparse(link).path.strip().lower()
+            if path in ('', '/', '/careers', '/jobs'):
+                continue
+
+            if link not in filtered:
+                filtered.append(link)
+
+        return filtered[:max_jobs]
+
+    def expand_listing_links(self, links: List[str]) -> List[str]:
+        """Open listing/search links and extract concrete job detail links."""
+        if not links:
+            return []
+
+        listing_tokens = ['/search', '/jobs', '/careers', '/opportunities']
+        job_tokens = ['/job/', '/jobs/view/', '/position/', '/requisition', 'greenhouse.io', 'lever.co']
+
+        listing_links = [
+            link for link in links
+            if any(token in link.lower() for token in listing_tokens) and '/job/' not in link.lower()
+        ][:5]
+
+        expanded: List[str] = []
+        for listing_link in listing_links:
+            try:
+                self.page.goto(listing_link, wait_until='domcontentloaded', timeout=15000)
+                self.page.wait_for_timeout(2500)
+                anchors = self.page.eval_on_selector_all('a[href]', 'els => [...new Set(els.map(e => e.href).filter(Boolean))]')
+                for anchor in anchors:
+                    if not isinstance(anchor, str) or not anchor.startswith('http'):
+                        continue
+                    lower_anchor = anchor.lower()
+                    if any(token in lower_anchor for token in job_tokens):
+                        if anchor not in expanded:
+                            expanded.append(anchor)
+            except Exception:
+                continue
+
+        max_jobs = int((self.config.get('filters') or {}).get('max_jobs', DEFAULT_GENERIC_FILTERS['max_jobs']))
+        return expanded[:max_jobs]
     
     def safe_extract(self, selector: str, default: str = '') -> str:
         """Safely extract text from selector"""
@@ -444,6 +873,25 @@ class JobSiteScraper:
         except Exception:
             pass
         return default
+
+    def extract_section_from_body(self, headings: List[str], window: int = 1800) -> str:
+        """Extract a focused section from body text using heading keywords"""
+        try:
+            body_text = self.page.locator('body').text_content() or ''
+            if not body_text:
+                return ''
+
+            normalized = ' '.join(body_text.split())
+            lower_text = normalized.lower()
+
+            for heading in headings:
+                idx = lower_text.find(heading.lower())
+                if idx != -1:
+                    return normalized[idx:idx + window].strip()
+        except Exception:
+            pass
+
+        return ''
 
 
 def compute_job_id(link: str) -> str:
@@ -573,13 +1021,14 @@ def upsert_jobs_to_supabase(client: object, jobs_df: pd.DataFrame) -> None:
         logger.error(f"Failed to upsert jobs to Supabase: {str(e)}")
         logger.error(f"Traceback:\n{traceback.format_exc()}")
 
-def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str]] = None, output_file: str = 'multi_site_jobs.xlsx'):
+def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str]] = None, output_file: str = 'multi_site_jobs.xlsx', sites_file: Optional[str] = None):
     """Scrape multiple job sites
     
     Args:
         headless: Run browser in headless mode (default True)
         site_filter: Optional list of site types to scrape (e.g., ['amazon', 'pg_careers'])
         output_file: Output Excel filename (default 'multi_site_jobs.xlsx')
+        sites_file: Optional CSV/XLSX/JSON/PDF file with additional career-site URLs
     """
     
     sites = [
@@ -604,7 +1053,14 @@ def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str
         },
     ]
 
+    if sites_file:
+        external_sites = load_additional_sites(sites_file)
+        sites.extend(external_sites)
+        logger.info(f"Total configured sites after file load: {len(sites)}")
+
     all_jobs = []
+    filter_profiles = load_filter_profiles()
+    profiles_updated = False
 
     for site in sites:
         if not site.get('enabled', True):
@@ -619,6 +1075,16 @@ def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str
         logger.info(f"\n{'='*60}")
         logger.info(f"Starting scrape for {site['name']}")
         logger.info(f"{'='*60}")
+
+        if site.get('type') == 'generic':
+            site_key = get_site_profile_key(site.get('url', ''))
+            site['site_profile_key'] = site_key
+            if not site.get('filters') and site_key in filter_profiles:
+                site['filters'] = filter_profiles[site_key]
+                logger.info(f"Using cached filters for {site['name']} ({site_key})")
+            elif not site.get('filters'):
+                site['auto_analyze_filters'] = True
+                logger.info(f"No cached filters for {site['name']} ({site_key}); inferring filters from first run")
         
         scraper = JobSiteScraper(site)
         try:
@@ -631,6 +1097,14 @@ def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str
             
             scraper.start_browser(headless=headless, storage_state=storage_state)
             jobs = scraper.scrape(site['url'])
+
+            if site.get('type') == 'generic':
+                inferred_filters = scraper.config.get('inferred_filters')
+                site_key = scraper.config.get('site_profile_key') or get_site_profile_key(site.get('url', ''))
+                if inferred_filters and site_key:
+                    filter_profiles[site_key] = inferred_filters
+                    profiles_updated = True
+
             # Filter valid jobs
             valid_jobs = [job for job in jobs if validate_job_data(job)]
             all_jobs.extend(valid_jobs)
@@ -639,6 +1113,9 @@ def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str
             logger.error(f"Failed to scrape {site['name']}: {e}")
         finally:
             scraper.close_browser()
+
+    if profiles_updated:
+        save_filter_profiles(filter_profiles)
     
     if not all_jobs:
         logger.warning("No jobs were scraped from any site")

@@ -18,6 +18,7 @@ A powerful, automated job scraper built with Python and Playwright that extracts
 - **Database Sync**: Optional Supabase integration for persistent storage
 - **Incremental Updates**: Merges new job listings with existing data
 - **CLI Flexibility**: Filter by site, customize output, run in headless or visible mode
+- **Bring Your Own Site List**: Load additional company career URLs from CSV/XLSX/JSON
 
 ## 📋 Prerequisites
 
@@ -74,10 +75,34 @@ python main.py --sites amazon,pg_careers
 python main.py --output my_jobs.xlsx
 ```
 
+**Include additional company career sites from file**:
+```bash
+python main.py --sites-file "C:/path/to/companies.xlsx"
+```
+
+**Extract URLs from a companies PDF into JSON**:
+```bash
+python main.py --extract-sites-pdf "C:/path/to/companies.pdf" --sites-output "companies.json"
+```
+
+**Use extracted JSON together with existing sites**:
+```bash
+python main.py --sites-file "companies.json"
+```
+
 **Combine multiple options**:
 ```bash
 python main.py --headful --sites amazon --output amazon_jobs.xlsx
 ```
+
+### Additional Sites File Format
+
+Supported formats for `--sites-file`: `.csv`, `.xlsx`, `.json`
+
+- For CSV/XLSX/JSON, include at least a URL column: `url` (or `career_url`, `careers_url`, `site`)
+- Optional columns: `name`, `type`, `enabled`
+- Unsupported `type` values automatically fallback to `generic`
+- For PDF input, first run `--extract-sites-pdf` to generate a JSON file, then pass that JSON to `--sites-file`
 
 ### LinkedIn Authentication (Optional)
 
