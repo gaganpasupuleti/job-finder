@@ -30,7 +30,7 @@ def main():
         '--output',
         type=str,
         default='multi_site_jobs.xlsx',
-        help='Output Excel filename (default: multi_site_jobs.xlsx). Must end with .xlsx'
+        help='Output Excel file name (default: multi_site_jobs.xlsx). Must end with .xlsx'
     )
     parser.add_argument(
         '--save-linkedin', 

@@ -275,7 +275,9 @@ class JobSiteScraper:
                             next_elem = desc_heading.evaluate('(el) => el.nextElementSibling?.textContent || ""')
                             job_description = next_elem.strip() if next_elem else ''
                         if not job_description:
-                            # Fallback: grab body text (truncated to avoid too much noise)
+                            # Fallback: grab body text
+                            # Note: Using shorter MAX_REQUIREMENTS_LENGTH (500) for fallback to avoid
+                            # overwhelming Excel with too much unstructured text when proper extraction fails
                             body_text = self.page.locator('body').text_content()
                             job_description = body_text[:MAX_REQUIREMENTS_LENGTH] if body_text else ''
                     except Exception as e:
@@ -364,7 +366,9 @@ class JobSiteScraper:
                             next_elem = desc_heading.evaluate('(el) => el.nextElementSibling?.textContent || ""')
                             job_description = next_elem.strip() if next_elem else ''
                         if not job_description:
-                            # Fallback: grab body text (truncated to avoid too much noise)
+                            # Fallback: grab body text
+                            # Note: Using shorter MAX_REQUIREMENTS_LENGTH (500) for fallback to avoid
+                            # overwhelming Excel with too much unstructured text when proper extraction fails
                             page_text = self.page.locator('body').text_content()
                             job_description = page_text[:MAX_REQUIREMENTS_LENGTH] if page_text else ''
                     except Exception as e:
