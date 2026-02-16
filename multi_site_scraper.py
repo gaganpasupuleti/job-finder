@@ -74,30 +74,42 @@ def extract_essential_keywords(text: str, title: str = '') -> str:
         return ''
     
     # Combine text sources
-    combined_text = f"{title} {text}".lower()
+    combined_text = f"{title} {text}"
     
-    # Common technical keywords and skills to look for
+    # Common technical keywords and skills to look for (with proper display names)
+    # Format: (pattern, display_name, use_word_boundaries)
     tech_keywords = [
-        # Programming languages
-        'python', 'java', 'javascript', 'typescript', r'c\+\+', r'c#', 'ruby', 'go', 'rust', 'php', 'swift', 'kotlin',
+        # Programming languages (special patterns for C++ and C#)
+        ('python', 'Python', True), ('java', 'Java', True), ('javascript', 'JavaScript', True), ('typescript', 'TypeScript', True), 
+        (r'c\+\+', 'C++', False), (r'c#', 'C#', False), ('ruby', 'Ruby', True), (r'\bgo\b', 'Go', False), ('rust', 'Rust', True), 
+        ('php', 'PHP', True), ('swift', 'Swift', True), ('kotlin', 'Kotlin', True),
         # Frameworks/Libraries
-        'react', 'angular', 'vue', r'node\.?js', 'django', 'flask', 'spring', 'express', 'fastapi',
+        ('react', 'React', True), ('angular', 'Angular', True), ('vue', 'Vue', True), (r'node\.?js', 'Node.js', True), 
+        ('django', 'Django', True), ('flask', 'Flask', True), ('spring', 'Spring', True), ('express', 'Express', True), ('fastapi', 'FastAPI', True),
         # Databases
-        'sql', 'mysql', 'postgresql', 'mongodb', 'redis', 'dynamodb', 'oracle', 'cassandra',
+        ('sql', 'SQL', True), ('mysql', 'MySQL', True), ('postgresql', 'PostgreSQL', True), ('mongodb', 'MongoDB', True), 
+        ('redis', 'Redis', True), ('dynamodb', 'DynamoDB', True), ('oracle', 'Oracle', True), ('cassandra', 'Cassandra', True),
         # Cloud/DevOps
-        'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'jenkins', 'ci/cd', 'terraform', 'ansible',
+        ('aws', 'AWS', True), ('azure', 'Azure', True), ('gcp', 'GCP', True), ('docker', 'Docker', True), 
+        ('kubernetes', 'Kubernetes', True), ('jenkins', 'Jenkins', True), ('ci/cd', 'CI/CD', True), 
+        ('terraform', 'Terraform', True), ('ansible', 'Ansible', True),
         # Data/AI/ML
-        'machine learning', 'deep learning', 'ai', 'data science', 'tensorflow', 'pytorch', 'pandas', 'numpy',
+        ('machine learning', 'Machine Learning', True), ('deep learning', 'Deep Learning', True), (r'\bai\b', 'AI', False), 
+        ('data science', 'Data Science', True), ('tensorflow', 'TensorFlow', True), ('pytorch', 'PyTorch', True), 
+        ('pandas', 'Pandas', True), ('numpy', 'NumPy', True),
         # Other skills
-        'agile', 'scrum', 'git', 'rest api', 'graphql', 'microservices', 'linux', 'bash',
+        ('agile', 'Agile', True), ('scrum', 'Scrum', True), ('git', 'Git', True), ('rest api', 'REST API', True), 
+        ('graphql', 'GraphQL', True), ('microservices', 'Microservices', True), ('linux', 'Linux', True), ('bash', 'Bash', True),
     ]
     
     found_keywords = []
-    for keyword in tech_keywords:
-        if re.search(r'\b' + keyword + r'\b', combined_text):
-            # Capitalize properly
-            clean_keyword = keyword.replace('\\', '').replace('.', '').replace('?', '')
-            found_keywords.append(clean_keyword.upper() if len(clean_keyword) <= 4 else clean_keyword.title())
+    for pattern, display_name, use_word_boundaries in tech_keywords:
+        if use_word_boundaries:
+            regex = r'\b' + pattern + r'\b'
+        else:
+            regex = pattern
+        if re.search(regex, combined_text, re.IGNORECASE):
+            found_keywords.append(display_name)
     
     # Remove duplicates and return comma-separated
     unique_keywords = list(dict.fromkeys(found_keywords))
