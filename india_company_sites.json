@@ -1,0 +1,614 @@
+[
+  {
+    "name": "Tcs Careers",
+    "type": "generic",
+    "url": "https://www.tcs.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Infosys Careers",
+    "type": "generic",
+    "url": "https://www.infosys.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.wipro.com/",
+    "enabled": true
+  },
+  {
+    "name": "Hcltech Careers",
+    "type": "generic",
+    "url": "https://www.hcltech.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.techmahindra.com/",
+    "enabled": true
+  },
+  {
+    "name": "Accenture Careers",
+    "type": "generic",
+    "url": "https://www.accenture.com/in-en/careers",
+    "enabled": true
+  },
+  {
+    "name": "Capgemini Careers",
+    "type": "generic",
+    "url": "https://www.capgemini.com/in-en/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Ibm Careers",
+    "type": "generic",
+    "url": "https://www.ibm.com/employment/",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.cognizant.com/in/en",
+    "enabled": true
+  },
+  {
+    "name": "Oracle Careers",
+    "type": "generic",
+    "url": "https://oracle.taleo.net/careersection/2/jobsearch.ftl?lang=en",
+    "enabled": true
+  },
+  {
+    "name": "Amazon Careers",
+    "type": "generic",
+    "url": "https://www.amazon.jobs/en/locations/india",
+    "enabled": true
+  },
+  {
+    "name": "Flipkartcareers Careers",
+    "type": "generic",
+    "url": "https://www.flipkartcareers.com/#!/",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.microsoft.com/us/en/india",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.google.com/locations/india/",
+    "enabled": true
+  },
+  {
+    "name": "Paytm Careers",
+    "type": "generic",
+    "url": "https://paytm.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Olacabs Careers",
+    "type": "generic",
+    "url": "https://www.olacabs.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Zomato Careers",
+    "type": "generic",
+    "url": "https://www.zomato.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.swiggy.com/",
+    "enabled": true
+  },
+  {
+    "name": "Byjus Careers",
+    "type": "generic",
+    "url": "https://byjus.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Ril Careers",
+    "type": "generic",
+    "url": "https://www.ril.com/Careers/CurrentOpenings.aspx",
+    "enabled": true
+  },
+  {
+    "name": "Larsentoubro Careers",
+    "type": "generic",
+    "url": "https://www.larsentoubro.com/corporate/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Airtel Careers",
+    "type": "generic",
+    "url": "https://www.airtel.in/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.adityabirla.com/",
+    "enabled": true
+  },
+  {
+    "name": "Mahindra Careers",
+    "type": "generic",
+    "url": "https://www.mahindra.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Asianpaints Careers",
+    "type": "generic",
+    "url": "https://www.asianpaints.com/more/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Nestle Careers",
+    "type": "generic",
+    "url": "https://www.nestle.in/jobs",
+    "enabled": true
+  },
+  {
+    "name": "Hul Careers",
+    "type": "generic",
+    "url": "https://www.hul.co.in/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Itcportal Careers",
+    "type": "generic",
+    "url": "https://www.itcportal.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Marutisuzuki Careers",
+    "type": "generic",
+    "url": "https://www.marutisuzuki.com/corporate/careers",
+    "enabled": true
+  },
+  {
+    "name": "Jobs Careers",
+    "type": "generic",
+    "url": "https://jobs.heromotocorp.com/",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.tatamotors.com/",
+    "enabled": true
+  },
+  {
+    "name": "Bosch Careers",
+    "type": "generic",
+    "url": "https://www.bosch.in/careers/",
+    "enabled": true
+  },
+  {
+    "name": "New Careers",
+    "type": "generic",
+    "url": "https://new.siemens.com/in/en/company/jobs.html",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://www.careers.philips.com/in/en",
+    "enabled": true
+  },
+  {
+    "name": "Pepsicojobs Careers",
+    "type": "generic",
+    "url": "https://www.pepsicojobs.com/india/home",
+    "enabled": true
+  },
+  {
+    "name": "Coca Colaindia Careers",
+    "type": "generic",
+    "url": "https://www.coca-colaindia.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Jnj Careers",
+    "type": "generic",
+    "url": "https://www.jnj.in/careers",
+    "enabled": true
+  },
+  {
+    "name": "Www2 Careers",
+    "type": "generic",
+    "url": "https://www2.deloitte.com/in/en/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Ey Careers",
+    "type": "generic",
+    "url": "https://www.ey.com/en_in/careers",
+    "enabled": true
+  },
+  {
+    "name": "Home Careers",
+    "type": "generic",
+    "url": "https://home.kpmg/in/en/home/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Pwc Careers",
+    "type": "generic",
+    "url": "https://www.pwc.in/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Ashokleyland Careers",
+    "type": "generic",
+    "url": "https://www.ashokleyland.com/en/careers",
+    "enabled": true
+  },
+  {
+    "name": "Tvsmotor Careers",
+    "type": "generic",
+    "url": "https://www.tvsmotor.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Goindigo Careers",
+    "type": "generic",
+    "url": "https://www.goindigo.in/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Spicejet Careers",
+    "type": "generic",
+    "url": "https://www.spicejet.com/Careers.aspx",
+    "enabled": true
+  },
+  {
+    "name": "Tatasteel Careers",
+    "type": "generic",
+    "url": "https://www.tatasteel.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Jsw Careers",
+    "type": "generic",
+    "url": "https://www.jsw.in/careers",
+    "enabled": true
+  },
+  {
+    "name": "Vedantaresources Careers",
+    "type": "generic",
+    "url": "https://www.vedantaresources.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Bharatpetroleum Careers",
+    "type": "generic",
+    "url": "https://www.bharatpetroleum.com/Careers/Careers.aspx",
+    "enabled": true
+  },
+  {
+    "name": "Iocl Careers",
+    "type": "generic",
+    "url": "https://www.iocl.com/PeopleCareers/job.aspx",
+    "enabled": true
+  },
+  {
+    "name": "Ongcindia Careers",
+    "type": "generic",
+    "url": "https://www.ongcindia.com/wps/wcm/connect/en/career/recruitment-notice/",
+    "enabled": true
+  },
+  {
+    "name": "Hdfcbank Careers",
+    "type": "generic",
+    "url": "https://www.hdfcbank.com/personal/about-us/careers",
+    "enabled": true
+  },
+  {
+    "name": "Icicicareers Careers",
+    "type": "generic",
+    "url": "https://www.icicicareers.com/Website/default.aspx",
+    "enabled": true
+  },
+  {
+    "name": "Axisbank Careers",
+    "type": "generic",
+    "url": "https://www.axisbank.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Kotak Careers",
+    "type": "generic",
+    "url": "https://www.kotak.com/en/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Sbi Careers",
+    "type": "generic",
+    "url": "https://sbi.co.in/web/careers/current-openings",
+    "enabled": true
+  },
+  {
+    "name": "Yesbank Careers",
+    "type": "generic",
+    "url": "https://www.yesbank.in/careers",
+    "enabled": true
+  },
+  {
+    "name": "Idfcfirstbank Careers",
+    "type": "generic",
+    "url": "https://www.idfcfirstbank.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Bankofbaroda Careers",
+    "type": "generic",
+    "url": "https://www.bankofbaroda.in/career",
+    "enabled": true
+  },
+  {
+    "name": "Tatapower Careers",
+    "type": "generic",
+    "url": "https://www.tatapower.com/careers.aspx",
+    "enabled": true
+  },
+  {
+    "name": "Torrentpower Careers",
+    "type": "generic",
+    "url": "https://www.torrentpower.com/index.php/career",
+    "enabled": true
+  },
+  {
+    "name": "Adanienterprises Careers",
+    "type": "generic",
+    "url": "https://www.adanienterprises.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Godrejcareers Careers",
+    "type": "generic",
+    "url": "https://godrejcareers.com/",
+    "enabled": true
+  },
+  {
+    "name": "Havells Careers",
+    "type": "generic",
+    "url": "https://www.havells.com/en/career.html",
+    "enabled": true
+  },
+  {
+    "name": "Bajajfinserv Careers",
+    "type": "generic",
+    "url": "https://www.bajajfinserv.in/careers",
+    "enabled": true
+  },
+  {
+    "name": "Ltfs Careers",
+    "type": "generic",
+    "url": "https://www.ltfs.com/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Tatacapital Careers",
+    "type": "generic",
+    "url": "https://www.tatacapital.com/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Kotaksecurities Careers",
+    "type": "generic",
+    "url": "https://www.kotaksecurities.com/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Sbilife Careers",
+    "type": "generic",
+    "url": "https://www.sbilife.co.in/en/about-us/careers",
+    "enabled": true
+  },
+  {
+    "name": "Hdfclife Careers",
+    "type": "generic",
+    "url": "https://www.hdfclife.com/about-us/careers",
+    "enabled": true
+  },
+  {
+    "name": "Iciciprulife Careers",
+    "type": "generic",
+    "url": "https://www.iciciprulife.com/about-us/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Bajajallianz Careers",
+    "type": "generic",
+    "url": "https://www.bajajallianz.com/corporate/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Reliancegeneral Careers",
+    "type": "generic",
+    "url": "https://www.reliancegeneral.co.in/Insurance/Careers/Careers.aspx",
+    "enabled": true
+  },
+  {
+    "name": "Apollohospitals Careers",
+    "type": "generic",
+    "url": "https://www.apollohospitals.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Fortishealthcare Careers",
+    "type": "generic",
+    "url": "https://www.fortishealthcare.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Maxhealthcare Careers",
+    "type": "generic",
+    "url": "https://www.maxhealthcare.in/careers",
+    "enabled": true
+  },
+  {
+    "name": "Sunpharma Careers",
+    "type": "generic",
+    "url": "https://sunpharma.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Drreddys Careers",
+    "type": "generic",
+    "url": "https://www.drreddys.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Cipla Careers",
+    "type": "generic",
+    "url": "https://www.cipla.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Lupin Careers",
+    "type": "generic",
+    "url": "https://www.lupin.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Glenmarkpharma Careers",
+    "type": "generic",
+    "url": "https://www.glenmarkpharma.com/en/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Biocon Careers",
+    "type": "generic",
+    "url": "https://www.biocon.com/biocon-careers/",
+    "enabled": true
+  },
+  {
+    "name": "Zyduscadila Careers",
+    "type": "generic",
+    "url": "https://www.zyduscadila.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Piramal Careers",
+    "type": "generic",
+    "url": "https://www.piramal.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.mphasis.com/home.html",
+    "enabled": true
+  },
+  {
+    "name": "Mindtree Careers",
+    "type": "generic",
+    "url": "https://www.mindtree.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Lntinfotech Careers",
+    "type": "generic",
+    "url": "https://www.lntinfotech.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.hexaware.com/",
+    "enabled": true
+  },
+  {
+    "name": "Persistent Careers",
+    "type": "generic",
+    "url": "https://www.persistent.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Coforgetech Careers",
+    "type": "generic",
+    "url": "https://www.coforgetech.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.genpact.com/",
+    "enabled": true
+  },
+  {
+    "name": "Exlservice Careers",
+    "type": "generic",
+    "url": "https://www.exlservice.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Firstsource Careers",
+    "type": "generic",
+    "url": "https://www.firstsource.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Quest Global Careers",
+    "type": "generic",
+    "url": "https://www.quest-global.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Ramco Careers",
+    "type": "generic",
+    "url": "https://www.ramco.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Kpit Careers",
+    "type": "generic",
+    "url": "https://www.kpit.com/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Lavamobiles Careers",
+    "type": "generic",
+    "url": "https://www.lavamobiles.com/career",
+    "enabled": true
+  },
+  {
+    "name": "Micromaxinfo Careers",
+    "type": "generic",
+    "url": "https://www.micromaxinfo.com/careers.html",
+    "enabled": true
+  },
+  {
+    "name": "Samsung Careers",
+    "type": "generic",
+    "url": "https://www.samsung.com/in/aboutsamsung/careers/",
+    "enabled": true
+  },
+  {
+    "name": "Sony Careers",
+    "type": "generic",
+    "url": "https://www.sony.co.in/microsite/careers/index.html",
+    "enabled": true
+  },
+  {
+    "name": "Lg Careers",
+    "type": "generic",
+    "url": "https://www.lg.com/in/careers",
+    "enabled": true
+  },
+  {
+    "name": "Panasonic Careers",
+    "type": "generic",
+    "url": "https://www.panasonic.com/in/corporate/careers.html",
+    "enabled": true
+  }
+]

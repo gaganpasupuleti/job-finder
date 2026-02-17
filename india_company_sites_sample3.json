@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Tcs Careers",
+    "type": "generic",
+    "url": "https://www.tcs.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Infosys Careers",
+    "type": "generic",
+    "url": "https://www.infosys.com/careers",
+    "enabled": true
+  },
+  {
+    "name": "Careers Careers",
+    "type": "generic",
+    "url": "https://careers.wipro.com/",
+    "enabled": true
+  }
+]

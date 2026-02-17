@@ -1,0 +1,19 @@
+{
+  "careers.wipro.com": {
+    "include_patterns": [
+      "/search/"
+    ],
+    "exclude_patterns": [
+      "/about",
+      "/blog",
+      "/news",
+      "/event",
+      "/privacy",
+      "/terms",
+      "/contact",
+      "/investor"
+    ],
+    "title_must_contain": [],
+    "max_jobs": 20
+  }
+}
