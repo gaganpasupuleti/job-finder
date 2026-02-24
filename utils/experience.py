@@ -11,7 +11,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Map written numbers to integers (1-20)
+# Map written numbers to integers (0-20).
+# Note: values above 20 are not supported by word-to-number conversion.
+# Job postings rarely use written numbers beyond "twenty" for years of experience.
 _WORD_TO_NUM = {
     'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
     'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,

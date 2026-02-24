@@ -21,7 +21,7 @@ except ImportError:
 
 
 def get_supabase_client() -> Optional[object]:
-    """Initialise Supabase client from environment variables.
+    """Initialize Supabase client from environment variables.
 
     Returns:
         Supabase client or ``None`` when not configured / unavailable.

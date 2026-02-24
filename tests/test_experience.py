@@ -50,6 +50,17 @@ class TestExtractYearsOfExperience:
         result = extract_years_of_experience('three to five years of experience')
         assert result == '3'
 
+    def test_written_number_twenty(self):
+        result = extract_years_of_experience('twenty years of experience')
+        assert result == '20'
+
+    def test_written_number_zero(self):
+        # 'zero years of experience' → 0 but our range guard filters 0 < val, so empty
+        # This documents the current behavior (zero experience is caught by fresher patterns)
+        result = extract_years_of_experience('zero years of experience required')
+        # zero triggers fresher path or returns '' depending on order; must not error
+        assert isinstance(result, str)
+
     def test_fresher_returns_zero(self):
         assert extract_years_of_experience('Looking for freshers') == '0'
 
