@@ -5,7 +5,7 @@ import time
 import json
 import hashlib
 import os
-from urllib.parse import unquote
+from urllib.parse import unquote, quote_plus
 from pathlib import Path
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional
@@ -599,33 +599,109 @@ class JobSiteScraper:
         """Extract jobs from LinkedIn job search pages"""
         logger.info("Using LinkedIn extraction method")
         jobs_data = []
+        max_jobs = int(self.config.get('max_jobs', 50))
+
+        def normalize_linkedin_link(link: str) -> str:
+            if not link:
+                return ''
+            value = link.strip()
+            if value.startswith('/'):
+                value = 'https://www.linkedin.com' + value
+            if '/jobs/view/' not in value:
+                return ''
+            return value.split('?')[0]
+
+        def collect_linkedin_job_links(target_count: int) -> List[str]:
+            selectors = [
+                'a.job-card-container__link',
+                'a.base-card__full-link',
+                'a[href*="/jobs/view/"]'
+            ]
+
+            collected: List[str] = []
+            stagnant_rounds = 0
+
+            max_rounds = max(8, min(30, target_count // 5 + 8))
+            for _ in range(max_rounds):
+                before_count = len(collected)
+
+                for selector in selectors:
+                    try:
+                        extracted = self.page.eval_on_selector_all(
+                            selector,
+                            'elements => [...new Set(elements.map(e => e.href || e.getAttribute("href") || "").filter(Boolean))]'
+                        )
+                        for link in extracted:
+                            normalized = normalize_linkedin_link(str(link))
+                            if normalized and normalized not in collected:
+                                collected.append(normalized)
+                    except Exception:
+                        continue
+
+                if len(collected) >= target_count:
+                    break
+
+                try:
+                    self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+                except Exception:
+                    pass
+
+                try:
+                    show_more_btn = self.page.locator('button.infinite-scroller__show-more-button, button:has-text("See more jobs"), button[aria-label*="See more jobs"]').first
+                    if show_more_btn and show_more_btn.is_visible(timeout=1500):
+                        show_more_btn.click(timeout=3000)
+                except Exception:
+                    pass
+
+                self.page.wait_for_timeout(1200)
+
+                if len(collected) == before_count:
+                    stagnant_rounds += 1
+                else:
+                    stagnant_rounds = 0
+
+                if stagnant_rounds >= 4:
+                    break
+
+            return collected[:target_count]
+
         try:
-            # Wait for job listing container
             try:
-                self.page.wait_for_selector('ul.jobs-search__results-list, .jobs-search-results__list, div.jobs-search-results-list', timeout=10000)
+                self.page.wait_for_selector(
+                    'ul.jobs-search__results-list, .jobs-search-results__list, div.jobs-search-results-list, a[href*="/jobs/view/"]',
+                    timeout=12000
+                )
             except Exception:
                 logger.warning("LinkedIn job list not visible yet")
 
-            # Collect job links (common LinkedIn job URL patterns)
-            job_links = self.page.eval_on_selector_all(
-                'a[href*="/jobs/view/"], a[href*="/jobs/"]',
-                'elements => [...new Set(elements.map(e => e.href))]'
-            )
+            job_links = collect_linkedin_job_links(max_jobs)
+
             logger.info(f"Found {len(job_links)} LinkedIn job links")
 
             if not job_links:
                 logger.warning("No LinkedIn job links found on page")
                 return []
 
-            # Limit to first 50 to avoid long runs
-            for idx, link in enumerate(job_links[:50], 1):
-                logger.info(f"Processing LinkedIn job {idx}/{min(len(job_links),50)}")
+            for idx, link in enumerate(job_links[:max_jobs], 1):
+                logger.info(f"Processing LinkedIn job {idx}/{min(len(job_links), max_jobs)}")
                 try:
                     self.page.goto(link, wait_until="domcontentloaded", timeout=15000)
                     time.sleep(1)
 
                     title = self.safe_extract('h1.jobs-unified-top-card__job-title, h1.topcard__title', default='')
+                    if not title:
+                        title = (self.page.title() or '').split('|')[0].strip()
+
+                    invalid_titles = {
+                        'sign up', 'join now', 'log in', 'linkedin', 'linkedin login', 'linkedin: log in or sign up'
+                    }
+                    if not title or title.strip().lower() in invalid_titles:
+                        continue
+
                     company = self.safe_extract('a.jobs-unified-top-card__company-name, a.topcard__org-name-link, span.jobs-unified-top-card__company-name', default='')
+                    if not company:
+                        company = self.safe_extract('span.topcard__flavor, div.job-details-jobs-unified-top-card__company-name', default='')
+
                     location = self.safe_extract('span.jobs-unified-top-card__company-location, span.topcard__flavor--bullet, span.jobs-unified-top-card__bullet', default='')
                     posted = self.safe_extract('span.posted-time-ago__text, span.jobs-unified-top-card__posted-date', default='')
 
@@ -636,6 +712,24 @@ class JobSiteScraper:
                             job_description = desc.text_content().strip()
                     except Exception:
                         pass
+                    if not job_description:
+                        try:
+                            body_text = self.page.locator('body').text_content() or ''
+                            job_description = ' '.join(body_text.split())[:1200]
+                        except Exception:
+                            pass
+
+                    min_req = self.extract_section_from_body([
+                        'minimum qualifications',
+                        'basic qualifications',
+                        'requirements',
+                        'what you will need',
+                        'must have'
+                    ], window=1200)
+
+                    years_of_experience = extract_years_of_experience(min_req)
+                    if not years_of_experience:
+                        years_of_experience = extract_years_of_experience(job_description)
 
                     jobs_data.append({
                         'Job ID': compute_job_id(link),
@@ -644,10 +738,10 @@ class JobSiteScraper:
                         'Company': company,
                         'Location': location,
                         'Posted': posted,
-                        'Minimum Requirements': '',
+                        'Minimum Requirements': min_req[:350] if min_req else '',
                         'Good to Have': '',
                         'Job Description': job_description[:1000] if job_description else '',
-                        'Years of Experience': extract_years_of_experience(job_description),
+                        'Years of Experience': years_of_experience,
                         'Essential Keywords': extract_essential_keywords(job_description, title),
                         'Source': 'LinkedIn'
                     })
@@ -1021,7 +1115,17 @@ def upsert_jobs_to_supabase(client: object, jobs_df: pd.DataFrame) -> None:
         logger.error(f"Failed to upsert jobs to Supabase: {str(e)}")
         logger.error(f"Traceback:\n{traceback.format_exc()}")
 
-def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str]] = None, output_file: str = 'multi_site_jobs.xlsx', sites_file: Optional[str] = None):
+def run_multi_site_scraper(
+    headless: bool = True,
+    site_filter: Optional[List[str]] = None,
+    output_file: str = 'multi_site_jobs.xlsx',
+    sites_file: Optional[str] = None,
+    linkedin_enabled: bool = False,
+    linkedin_keywords: str = 'software engineer',
+    linkedin_location: str = 'India',
+    linkedin_max_jobs: int = 50,
+    linkedin_storage_state: str = 'linkedin_state.json'
+):
     """Scrape multiple job sites
     
     Args:
@@ -1029,6 +1133,11 @@ def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str
         site_filter: Optional list of site types to scrape (e.g., ['amazon', 'pg_careers'])
         output_file: Output Excel filename (default 'multi_site_jobs.xlsx')
         sites_file: Optional CSV/XLSX/JSON/PDF file with additional career-site URLs
+        linkedin_enabled: Enable LinkedIn scraping for this run
+        linkedin_keywords: LinkedIn search keywords
+        linkedin_location: LinkedIn search location
+        linkedin_max_jobs: Maximum number of LinkedIn jobs to process
+        linkedin_storage_state: Path to LinkedIn Playwright storage state file
     """
     
     sites = [
@@ -1047,9 +1156,10 @@ def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str
         {
             'name': 'LinkedIn Jobs',
             'type': 'linkedin',
-            'url': 'https://www.linkedin.com/jobs/search/?keywords=software%20engineer&location=India',
-            'enabled': False,  # Disabled until auth flow is finalized
-            'storage_state': 'linkedin_state.json'  # set to your saved storage state file if you need authenticated access
+            'url': f'https://www.linkedin.com/jobs/search/?keywords={quote_plus(linkedin_keywords)}&location={quote_plus(linkedin_location)}',
+            'enabled': linkedin_enabled,
+            'storage_state': linkedin_storage_state,
+            'max_jobs': max(1, int(linkedin_max_jobs))
         },
     ]
 
@@ -1196,6 +1306,65 @@ def run_multi_site_scraper(headless: bool = True, site_filter: Optional[List[str
         upsert_jobs_to_supabase(supabase_client, merged_df)
     
     return merged_df
+
+
+def split_jobs_by_experience(
+    jobs_df: pd.DataFrame,
+    freshers_output: str = 'linkedin_freshers_jobs.xlsx',
+    experienced_output: str = 'linkedin_1plus_jobs.xlsx'
+) -> Dict[str, int]:
+    """Split jobs into freshers (0 years/unknown) and 1+ years experience files."""
+    if jobs_df is None or jobs_df.empty:
+        return {'freshers': 0, 'experienced_1plus': 0}
+
+    import re
+
+    def infer_years(row: pd.Series) -> Optional[int]:
+        years_raw = str(row.get('Years of Experience', '') or '').strip()
+        match = re.search(r'\d{1,2}', years_raw)
+        if match:
+            return int(match.group(0))
+
+        text = ' '.join([
+            str(row.get('Title', '') or ''),
+            str(row.get('Minimum Requirements', '') or ''),
+            str(row.get('Job Description', '') or '')
+        ]).lower()
+
+        if any(token in text for token in ['fresher', 'entry level', 'entry-level', 'intern', 'trainee', 'graduate program']):
+            return 0
+
+        range_match = re.search(r'(\d{1,2})\s*(?:to|\-|–)\s*(\d{1,2})\s*\+?\s*years?', text)
+        if range_match:
+            return int(range_match.group(1))
+
+        exp_match = re.search(r'(\d{1,2})\s*\+?\s*(?:years?|yrs?)\s*(?:of\s*)?(?:experience|exp)', text)
+        if exp_match:
+            return int(exp_match.group(1))
+
+        return None
+
+    classified = jobs_df.copy()
+    classified['__min_years'] = classified.apply(infer_years, axis=1)
+
+    experienced_df = classified[classified['__min_years'].apply(lambda v: pd.notna(v) and float(v) >= 1)].copy()
+    freshers_df = classified[classified['__min_years'].apply(lambda v: pd.isna(v) or float(v) < 1)].copy()
+
+    freshers_df = freshers_df.drop(columns=['__min_years'])
+    experienced_df = experienced_df.drop(columns=['__min_years'])
+
+    freshers_df.to_excel(freshers_output, index=False)
+    experienced_df.to_excel(experienced_output, index=False)
+
+    logger.info(
+        f"Saved split outputs: freshers={len(freshers_df)} to {freshers_output}, "
+        f"1+ years={len(experienced_df)} to {experienced_output}"
+    )
+
+    return {
+        'freshers': len(freshers_df),
+        'experienced_1plus': len(experienced_df)
+    }
 
 if __name__ == "__main__":
     df = run_multi_site_scraper()

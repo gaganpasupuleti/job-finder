@@ -10,12 +10,19 @@ Usage:
                                                     # Extract career URLs from PDF into JSON
     python main.py --sites-file companies.json      # Include extra career sites from JSON/CSV/XLSX
     python main.py --output my_jobs.xlsx            # Save to custom filename
+    python main.py --enable-linkedin --sites linkedin --linkedin-keywords "data engineer" --linkedin-location "India"
+                                                    # Pull LinkedIn job listings using LinkedIn source
     python main.py --save-linkedin                  # Save LinkedIn authentication state (requires LINKEDIN_USER/LINKEDIN_PASS env vars)
 """
 
 import sys
 import argparse
-from multi_site_scraper import run_multi_site_scraper, save_linkedin_storage_state, export_sites_from_pdf
+from multi_site_scraper import (
+    run_multi_site_scraper,
+    save_linkedin_storage_state,
+    export_sites_from_pdf,
+    split_jobs_by_experience,
+)
 
 def main():
     parser = argparse.ArgumentParser(description='Multi-site job scraper (Amazon, P&G, LinkedIn)')
@@ -56,6 +63,52 @@ def main():
         action='store_true', 
         help='Save LinkedIn authentication state (requires LINKEDIN_USER and LINKEDIN_PASS env vars)'
     )
+    parser.add_argument(
+        '--enable-linkedin',
+        action='store_true',
+        help='Enable LinkedIn site scraping in this run (disabled by default)'
+    )
+    parser.add_argument(
+        '--linkedin-keywords',
+        type=str,
+        default='software engineer',
+        help='LinkedIn search keywords (default: software engineer)'
+    )
+    parser.add_argument(
+        '--linkedin-location',
+        type=str,
+        default='India',
+        help='LinkedIn search location (default: India)'
+    )
+    parser.add_argument(
+        '--linkedin-max-jobs',
+        type=int,
+        default=50,
+        help='Maximum LinkedIn jobs to process (default: 50)'
+    )
+    parser.add_argument(
+        '--linkedin-storage-state',
+        type=str,
+        default='linkedin_state.json',
+        help='Path to LinkedIn Playwright storage state file (default: linkedin_state.json)'
+    )
+    parser.add_argument(
+        '--split-experience',
+        action='store_true',
+        help='Split scraped jobs into two Excel files: freshers and 1+ years'
+    )
+    parser.add_argument(
+        '--freshers-output',
+        type=str,
+        default='linkedin_freshers_jobs.xlsx',
+        help='Output Excel file for freshers/entry-level jobs'
+    )
+    parser.add_argument(
+        '--experienced-output',
+        type=str,
+        default='linkedin_1plus_jobs.xlsx',
+        help='Output Excel file for jobs requiring 1+ years experience'
+    )
     
     args = parser.parse_args()
     
@@ -92,19 +145,41 @@ def main():
     print("Scraping Amazon, P&G Careers, and LinkedIn (if enabled)...")
     if args.sites_file:
         print(f"Including additional sites from: {args.sites_file}")
+    if args.enable_linkedin:
+        print(
+            f"LinkedIn enabled: keywords='{args.linkedin_keywords}', "
+            f"location='{args.linkedin_location}', max_jobs={args.linkedin_max_jobs}"
+        )
     print()
     
     df = run_multi_site_scraper(
         headless=headless,
         site_filter=site_filter,
         output_file=args.output,
-        sites_file=args.sites_file
+        sites_file=args.sites_file,
+        linkedin_enabled=args.enable_linkedin,
+        linkedin_keywords=args.linkedin_keywords,
+        linkedin_location=args.linkedin_location,
+        linkedin_max_jobs=args.linkedin_max_jobs,
+        linkedin_storage_state=args.linkedin_storage_state
     )
     
     if df is not None:
         print(f"\n✓ Success! Scraped {len(df)} total jobs")
         print(f"  Sources: {', '.join(df['Source'].unique())}")
         print(f"  Saved to: {args.output}\n")
+
+        if args.split_experience:
+            split_counts = split_jobs_by_experience(
+                df,
+                freshers_output=args.freshers_output,
+                experienced_output=args.experienced_output
+            )
+            print(
+                f"  Split files: {args.freshers_output} (freshers={split_counts['freshers']}), "
+                f"{args.experienced_output} (1+ years={split_counts['experienced_1plus']})\n"
+            )
+
         print("First 5 jobs:")
         print(df[['Title', 'Company', 'Location', 'Source']].head().to_string())
     else:

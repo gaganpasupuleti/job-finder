@@ -95,6 +95,16 @@ python main.py --sites-file "companies.json"
 python main.py --headful --sites amazon --output amazon_jobs.xlsx
 ```
 
+**Run LinkedIn source scraping**:
+```bash
+python main.py --enable-linkedin --sites linkedin --linkedin-keywords "data engineer" --linkedin-location "India" --linkedin-max-jobs 40
+```
+
+**Generate separate Excel files for freshers and 1+ years**:
+```bash
+python main.py --enable-linkedin --sites linkedin --linkedin-keywords "software engineer" --linkedin-location "India" --linkedin-max-jobs 100 --output linkedin_jobs.xlsx --split-experience --freshers-output linkedin_freshers_jobs.xlsx --experienced-output linkedin_1plus_jobs.xlsx
+```
+
 ### Additional Sites File Format
 
 Supported formats for `--sites-file`: `.csv`, `.xlsx`, `.json`
@@ -119,7 +129,15 @@ To enable LinkedIn scraping with authentication:
    python main.py --save-linkedin
    ```
 
-3. Enable LinkedIn in the code (see below)
+3. Run LinkedIn scraping (uses `linkedin_state.json` by default):
+   ```bash
+   python main.py --enable-linkedin --sites linkedin --linkedin-keywords "software engineer" --linkedin-location "India"
+   ```
+
+4. If your storage state file is custom, pass it explicitly:
+   ```bash
+   python main.py --enable-linkedin --sites linkedin --linkedin-storage-state my_linkedin_state.json
+   ```
 
 ## 🔧 Configuration
 
