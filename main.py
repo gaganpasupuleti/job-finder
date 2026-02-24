@@ -13,8 +13,12 @@ Usage:
     python main.py --enable-linkedin --sites linkedin --linkedin-keywords "data engineer" --linkedin-location "India"
                                                     # Pull LinkedIn job listings using LinkedIn source
     python main.py --save-linkedin                  # Save LinkedIn authentication state (requires LINKEDIN_USER/LINKEDIN_PASS env vars)
+    python main.py --dry-run                        # Collect data but skip writing files/database
+    python main.py --verbose                        # Enable DEBUG-level logging
+    python main.py --quiet                          # Suppress all output except errors
 """
 
+import logging
 import sys
 import argparse
 from multi_site_scraper import (
@@ -110,13 +114,37 @@ def main():
         help='Output Excel file for jobs requiring 1+ years experience'
     )
     
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Collect data but skip writing Excel file and Supabase sync'
+    )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Enable DEBUG-level logging output'
+    )
+    parser.add_argument(
+        '--quiet',
+        action='store_true',
+        help='Suppress all output except errors'
+    )
+    
     args = parser.parse_args()
+
+    # Configure logging verbosity
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    elif args.quiet:
+        logging.getLogger().setLevel(logging.ERROR)
+    else:
+        logging.getLogger().setLevel(logging.INFO)
     
     if args.save_linkedin:
         print("Saving LinkedIn authentication state...")
-        success = save_linkedin_storage_state('linkedin_state.json')
+        success = save_linkedin_storage_state(args.linkedin_storage_state)
         if success:
-            print("✓ LinkedIn storage state saved to 'linkedin_state.json'")
+            print(f"✓ LinkedIn storage state saved to '{args.linkedin_storage_state}'")
             print("  You can now run the scraper with authenticated LinkedIn access.")
         else:
             print("✗ Failed to save LinkedIn state. Check LINKEDIN_USER and LINKEDIN_PASS env vars.")
@@ -141,16 +169,19 @@ def main():
     
     # Run the multi-site scraper
     headless = not args.headful
-    print(f"Starting multi-site job scraper (headless={headless})...")
-    print("Scraping Amazon, P&G Careers, and LinkedIn (if enabled)...")
-    if args.sites_file:
-        print(f"Including additional sites from: {args.sites_file}")
-    if args.enable_linkedin:
-        print(
-            f"LinkedIn enabled: keywords='{args.linkedin_keywords}', "
-            f"location='{args.linkedin_location}', max_jobs={args.linkedin_max_jobs}"
-        )
-    print()
+    if not args.quiet:
+        print(f"Starting multi-site job scraper (headless={headless})...")
+        if args.dry_run:
+            print("  [dry-run mode] No files will be written.")
+        print("Scraping Amazon, P&G Careers, and LinkedIn (if enabled)...")
+        if args.sites_file:
+            print(f"Including additional sites from: {args.sites_file}")
+        if args.enable_linkedin:
+            print(
+                f"LinkedIn enabled: keywords='{args.linkedin_keywords}', "
+                f"location='{args.linkedin_location}', max_jobs={args.linkedin_max_jobs}"
+            )
+        print()
     
     df = run_multi_site_scraper(
         headless=headless,
@@ -161,29 +192,36 @@ def main():
         linkedin_keywords=args.linkedin_keywords,
         linkedin_location=args.linkedin_location,
         linkedin_max_jobs=args.linkedin_max_jobs,
-        linkedin_storage_state=args.linkedin_storage_state
+        linkedin_storage_state=args.linkedin_storage_state,
+        dry_run=args.dry_run,
     )
     
     if df is not None:
-        print(f"\n✓ Success! Scraped {len(df)} total jobs")
-        print(f"  Sources: {', '.join(df['Source'].unique())}")
-        print(f"  Saved to: {args.output}\n")
+        if not args.quiet:
+            print(f"\n✓ Success! Scraped {len(df)} total jobs")
+            if not args.dry_run:
+                print(f"  Sources: {', '.join(df['Source'].unique())}")
+                print(f"  Saved to: {args.output}\n")
+            else:
+                print(f"  Sources: {', '.join(df['Source'].unique())}")
+                print("  [dry-run] No files written.\n")
 
-        if args.split_experience:
-            split_counts = split_jobs_by_experience(
-                df,
-                freshers_output=args.freshers_output,
-                experienced_output=args.experienced_output
-            )
-            print(
-                f"  Split files: {args.freshers_output} (freshers={split_counts['freshers']}), "
-                f"{args.experienced_output} (1+ years={split_counts['experienced_1plus']})\n"
-            )
+            if args.split_experience and not args.dry_run:
+                split_counts = split_jobs_by_experience(
+                    df,
+                    freshers_output=args.freshers_output,
+                    experienced_output=args.experienced_output
+                )
+                print(
+                    f"  Split files: {args.freshers_output} (freshers={split_counts['freshers']}), "
+                    f"{args.experienced_output} (1+ years={split_counts['experienced_1plus']})\n"
+                )
 
-        print("First 5 jobs:")
-        print(df[['Title', 'Company', 'Location', 'Source']].head().to_string())
+            print("First 5 jobs:")
+            print(df[['Title', 'Company', 'Location', 'Source']].head().to_string())
     else:
-        print("✗ No jobs were scraped. Check logs above.")
+        if not args.quiet:
+            print("✗ No jobs were scraped. Check logs above.")
         sys.exit(1)
 
 if __name__ == '__main__':

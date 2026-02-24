@@ -16,7 +16,6 @@ env/
 
 # Output files
 *.xlsx
-multi_site_jobs.xlsx
 
 # Auth state (contains session cookies - sensitive!)
 linkedin_state.json
