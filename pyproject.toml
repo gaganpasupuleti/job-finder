@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "job-finder"
+version = "0.2.0"
+description = "Multi-site job scraper for Amazon, P&G, LinkedIn, and generic career sites"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "playwright>=1.44.0",
+    "pandas>=2.2.0",
+    "openpyxl>=3.1.2",
+    "supabase>=2.4.0",
+    "python-dotenv>=1.0.1",
+    "pypdf>=4.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-cov>=5.0.0",
+]
+
+[project.scripts]
+job-finder = "main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["scrapers*", "db*", "utils*"]
