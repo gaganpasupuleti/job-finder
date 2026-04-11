@@ -107,6 +107,16 @@ python main.py --sites-file companies.json
 python main.py --enable-linkedin --sites linkedin --linkedin-keywords "data engineer" --linkedin-location "India" --linkedin-max-jobs 40
 ```
 
+**Run LinkedIn via RapidAPI (no browser automation)**:
+```bash
+python main.py --enable-linkedin --sites linkedin \
+   --linkedin-source rapidapi \
+   --linkedin-keywords "software engineer" \
+   --linkedin-location "Hyderabad" \
+   --linkedin-api-pages 3 \
+   --linkedin-max-jobs 200
+```
+
 **Generate separate Excel files for freshers and 1+ years**:
 ```bash
 python main.py --enable-linkedin --sites linkedin --linkedin-keywords "software engineer" \
@@ -160,6 +170,10 @@ To enable LinkedIn scraping with authentication:
 | `SUPABASE_KEY` | Your Supabase anon/service key | No (for DB sync) |
 | `LINKEDIN_USER` | LinkedIn email for authentication | No (for LinkedIn) |
 | `LINKEDIN_PASS` | LinkedIn password | No (for LinkedIn) |
+| `RAPIDAPI_KEY` | RapidAPI key for LinkedIn API mode | No (for LinkedIn RapidAPI mode) |
+| `RAPIDAPI_HOST` | RapidAPI host header value | No (for LinkedIn RapidAPI mode) |
+| `RAPIDAPI_LINKEDIN_ENDPOINT` | LinkedIn API endpoint URL from RapidAPI playground | No (for LinkedIn RapidAPI mode) |
+| `RAPIDAPI_LINKEDIN_METHOD` | HTTP method (`GET` or `POST`) for endpoint | No (for LinkedIn RapidAPI mode) |
 
 ## 📊 Output Schema
 

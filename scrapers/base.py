@@ -6,7 +6,6 @@ extraction, and the retry-wrapped ``scrape`` entrypoint.
 """
 
 import logging
-import time
 from typing import Any, Dict, List, Optional
 
 from utils.retry import retry
@@ -41,6 +40,7 @@ class JobSiteScraper:
         self.context = None
         self.page = None
         self.p = None  # Playwright instance — kept to avoid AttributeError in close_browser
+        self._runtime_headless = True
 
     def start_browser(self, headless: bool = True, storage_state: Optional[str] = None) -> None:
         """Start Playwright browser, optionally with a saved auth state.
@@ -50,13 +50,36 @@ class JobSiteScraper:
             storage_state: Path to a Playwright storage-state JSON file.
         """
         from playwright.sync_api import sync_playwright
+
+        self._runtime_headless = headless
         self.p = sync_playwright().start()
-        self.browser = self.p.chromium.launch(headless=headless)
+
+        launch_kwargs: Dict[str, Any] = {
+            'headless': headless,
+            'args': [
+                '--disable-blink-features=AutomationControlled',
+                '--no-default-browser-check',
+                '--disable-dev-shm-usage',
+            ],
+        }
+        slow_mo = int(self.config.get('slow_mo_ms', 0) or 0)
+        if slow_mo > 0:
+            launch_kwargs['slow_mo'] = slow_mo
+
+        self.browser = self.p.chromium.launch(**launch_kwargs)
         context_kwargs: Dict[str, Any] = {'user_agent': _USER_AGENT}
         if storage_state:
             context_kwargs['storage_state'] = storage_state
         self.context = self.browser.new_context(**context_kwargs)
         self.page = self.context.new_page()
+
+        # Best-effort stealth hardening for bot-detection-heavy sites.
+        try:
+            from playwright_stealth import stealth_sync
+            stealth_sync(self.page)
+        except Exception as e:
+            logger.debug(f"playwright-stealth not applied: {e}")
+
         logger.info(
             f"Browser started for {self.config['name']} "
             f"(storage_state={'present' if storage_state else 'none'})"
@@ -100,6 +123,12 @@ class JobSiteScraper:
             List of raw job dicts.
         """
         try:
+            if self.config.get('type') == 'linkedin':
+                source_mode = str(self.config.get('source_mode', 'hybrid')).lower().strip()
+                if source_mode in {'rapidapi', 'hybrid'}:
+                    logger.info(f"LinkedIn pre-navigation mode active: {source_mode}")
+                    return self.extract_from_linkedin()
+
             logger.info(f"Loading {self.config['name']} job listing page...")
             nav_errors = []
             for wait_mode in ('networkidle', 'domcontentloaded'):

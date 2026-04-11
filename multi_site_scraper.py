@@ -34,7 +34,11 @@ from utils.filters import (  # noqa: F401
 from utils.retry import retry  # noqa: F401
 from utils.salary import extract_salary  # noqa: F401
 from utils.work_mode import detect_work_mode  # noqa: F401
-from db.supabase_sync import get_supabase_client, upsert_jobs_to_supabase  # noqa: F401
+from db.supabase_sync import (  # noqa: F401
+    get_supabase_client,
+    upsert_jobs_to_supabase,
+    fetch_recent_cached_jobs,
+)
 
 # ---------------------------------------------------------------------------
 # Composite scraper class — inherits all extract_from_* methods
@@ -102,9 +106,14 @@ def save_linkedin_storage_state(output_path: str = 'linkedin_state.json') -> boo
     try:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)
+            browser = p.chromium.launch(headless=False, slow_mo=120)
             context = browser.new_context()
             page = context.new_page()
+            try:
+                from playwright_stealth import stealth_sync
+                stealth_sync(page)
+            except Exception:
+                pass
             page.goto('https://www.linkedin.com/login', wait_until='domcontentloaded')
             page.fill('input[name="session_key"]', user)
             page.fill('input[name="session_password"]', pwd)
@@ -132,6 +141,8 @@ def run_multi_site_scraper(
     linkedin_keywords: str = 'software engineer',
     linkedin_location: str = 'India',
     linkedin_max_jobs: int = 50,
+    linkedin_source: str = 'browser',
+    linkedin_api_pages: int = 1,
     linkedin_storage_state: str = 'linkedin_state.json',
     dry_run: bool = False,
 ) -> Optional[pd.DataFrame]:
@@ -146,6 +157,8 @@ def run_multi_site_scraper(
         linkedin_keywords: LinkedIn search keywords.
         linkedin_location: LinkedIn search location.
         linkedin_max_jobs: Maximum number of LinkedIn jobs to process.
+        linkedin_source: LinkedIn source mode: ``browser`` or ``rapidapi``.
+        linkedin_api_pages: Number of RapidAPI pages to request.
         linkedin_storage_state: Path to LinkedIn Playwright storage state.
         dry_run: When ``True`` collect data but skip writing Excel / Supabase.
 
@@ -179,6 +192,11 @@ def run_multi_site_scraper(
             'enabled': linkedin_enabled,
             'storage_state': linkedin_storage_state,
             'max_jobs': max(1, int(linkedin_max_jobs)),
+            'source_mode': str(linkedin_source).lower().strip(),
+            'api_pages': max(1, int(linkedin_api_pages)),
+            'keywords': linkedin_keywords,
+            'location': linkedin_location,
+            'slow_mo_ms': 95,
         },
     ]
 
@@ -188,6 +206,7 @@ def run_multi_site_scraper(
         logger.info(f"Total configured sites after file load: {len(sites)}")
 
     all_jobs: List[Dict] = []
+    supabase_client = get_supabase_client()
     filter_profiles = load_filter_profiles()
     profiles_updated = False
 
@@ -225,6 +244,23 @@ def run_multi_site_scraper(
                     f"{site['name']}, proceeding without authentication"
                 )
                 storage_state = None
+
+            if site.get('type') == 'linkedin' and supabase_client is not None:
+                cached = fetch_recent_cached_jobs(
+                    supabase_client,
+                    keywords=str(site.get('keywords', '')),
+                    location=str(site.get('location', '')),
+                    source='LinkedIn',
+                    max_age_hours=24,
+                    limit=max(50, int(site.get('max_jobs', 50)) * 4),
+                )
+                if cached:
+                    logger.info(
+                        f"Using {len(cached)} cached LinkedIn jobs from last 24h "
+                        f"for keywords='{site.get('keywords')}', location='{site.get('location')}'"
+                    )
+                    all_jobs.extend(cached[: int(site.get('max_jobs', 50))])
+                    continue
 
             scraper.start_browser(headless=headless, storage_state=storage_state)
             jobs = scraper.scrape(site['url'])
@@ -313,7 +349,6 @@ def run_multi_site_scraper(
     merged_df.to_excel(output_path, index=False)
     logger.info(f"\nSaved {len(merged_df)} total jobs to {output_path} (added {added}, updated {updated})")
 
-    supabase_client = get_supabase_client()
     if supabase_client:
         upsert_jobs_to_supabase(supabase_client, merged_df)
 

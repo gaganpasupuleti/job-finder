@@ -6,8 +6,8 @@ import logging
 import os
 import time
 import traceback
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timezone, timedelta
+from typing import List, Optional
 
 import pandas as pd
 
@@ -56,6 +56,93 @@ def get_supabase_client() -> Optional[object]:
     except Exception as e:
         logger.error(f"Failed to initialize Supabase: {e}")
         return None
+
+
+def _to_standard_job_schema(row: dict) -> dict:
+    """Map a Supabase jobs-row dict to the common in-memory job schema."""
+    return {
+        'Job ID': str(row.get('job_id', '') or ''),
+        'Job Link': str(row.get('job_link', '') or ''),
+        'Title': str(row.get('title', '') or ''),
+        'Company': str(row.get('company', '') or ''),
+        'Location': str(row.get('location', '') or ''),
+        'Posted': str(row.get('posted', '') or ''),
+        'Minimum Requirements': str(row.get('minimum_requirements', '') or ''),
+        'Good to Have': str(row.get('good_to_have', '') or ''),
+        'Job Description': str(row.get('job_description', '') or ''),
+        'Years of Experience': str(row.get('years_of_experience', '') or ''),
+        'Essential Keywords': str(row.get('essential_keywords', '') or ''),
+        'Salary Range': str(row.get('salary_range', '') or ''),
+        'Work Mode': str(row.get('work_mode', '') or ''),
+        'Source': str(row.get('source', '') or ''),
+    }
+
+
+def fetch_recent_cached_jobs(
+    client: object,
+    *,
+    keywords: str,
+    location: str,
+    source: str = 'LinkedIn',
+    max_age_hours: int = 24,
+    limit: int = 300,
+) -> List[dict]:
+    """Return recently scraped jobs for a keyword/location combination.
+
+    This is used as a pre-scrape cache check to avoid unnecessary browser/API
+    calls when equivalent data already exists in the previous 24 hours.
+    """
+    if client is None:
+        return []
+
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+        resp = (
+            client.table('jobs')
+            .select(
+                'job_id,job_link,title,company,location,posted,minimum_requirements,'
+                'good_to_have,job_description,years_of_experience,essential_keywords,'
+                'salary_range,work_mode,source,scraped_at'
+            )
+            .eq('source', source)
+            .ilike('location', f"%{location}%")
+            .gte('scraped_at', cutoff)
+            .limit(limit)
+            .execute()
+        )
+
+        rows = resp.data or []
+        if not rows:
+            return []
+
+        terms = [
+            token.strip().lower()
+            for token in str(keywords).replace('(', ' ').replace(')', ' ').split('OR')
+            if token.strip()
+        ]
+        # Remove wrapping quotes from boolean terms.
+        terms = [t.strip().strip('"\'') for t in terms if t.strip().strip('"\'')]
+
+        filtered: List[dict] = []
+        for row in rows:
+            searchable = ' '.join([
+                str(row.get('title', '') or ''),
+                str(row.get('essential_keywords', '') or ''),
+                str(row.get('job_description', '') or ''),
+            ]).lower()
+
+            if terms and not any(term in searchable for term in terms):
+                continue
+            filtered.append(_to_standard_job_schema(row))
+
+        logger.info(
+            f"Cache lookup for source={source}, location={location}, terms={terms}: "
+            f"{len(filtered)} hit(s)"
+        )
+        return filtered
+    except Exception as e:
+        logger.warning(f"Pre-scrape cache check failed; proceeding with fresh scrape: {e}")
+        return []
 
 
 def upsert_jobs_to_supabase(client: object, jobs_df: pd.DataFrame) -> None:

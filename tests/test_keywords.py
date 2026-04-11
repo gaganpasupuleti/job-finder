@@ -3,7 +3,11 @@ Unit tests for utils/keywords.py — skill/keyword extraction.
 """
 
 import pytest
-from utils.keywords import extract_essential_keywords, extract_keywords_structured
+from utils.keywords import (
+    extract_essential_keywords,
+    extract_keywords_structured,
+    build_boolean_or_query,
+)
 
 
 class TestExtractEssentialKeywords:
@@ -93,3 +97,16 @@ class TestExtractKeywordsStructured:
         result = extract_keywords_structured('Python Python Python')
         names = [s['skill_name'] for s in result]
         assert len(names) == len(set(names))
+
+
+class TestBooleanBuilder:
+    def test_builds_or_query(self):
+        query = build_boolean_or_query(['Python', 'ServiceNow'])
+        assert query == '("Python" OR "ServiceNow")'
+
+    def test_single_title(self):
+        assert build_boolean_or_query(['Python']) == '"Python"'
+
+    def test_deduplicates_and_trims(self):
+        query = build_boolean_or_query(['  Python  ', 'python', '', 'Service Now'])
+        assert query == '("Python" OR "Service Now")'

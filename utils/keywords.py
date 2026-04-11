@@ -299,3 +299,39 @@ def extract_essential_keywords(text: str, title: str = '') -> str:
     skills = extract_keywords_structured(text, title)
     names = [s['skill_name'] for s in skills]
     return ', '.join(names[:20])
+
+
+def build_boolean_or_query(job_titles: List[str]) -> str:
+    """Build an optimized boolean OR query from a list of job titles.
+
+    Example:
+        ["Python", "ServiceNow"] -> ("Python" OR "ServiceNow")
+
+    Args:
+        job_titles: Candidate titles / skill phrases.
+
+    Returns:
+        Boolean query string suitable for search endpoints.
+    """
+    if not job_titles:
+        return ''
+
+    cleaned: List[str] = []
+    seen = set()
+    for item in job_titles:
+        title = str(item or '').strip()
+        if not title:
+            continue
+        # Normalize whitespace and escape embedded double-quotes.
+        title = ' '.join(title.split()).replace('"', '\\"')
+        key = title.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(f'"{title}"')
+
+    if not cleaned:
+        return ''
+    if len(cleaned) == 1:
+        return cleaned[0]
+    return f"({' OR '.join(cleaned)})"

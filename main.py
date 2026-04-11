@@ -91,6 +91,19 @@ def main():
         help='Maximum LinkedIn jobs to process (default: 50)'
     )
     parser.add_argument(
+        '--linkedin-source',
+        type=str,
+        choices=['browser', 'rapidapi', 'hybrid'],
+        default='hybrid',
+        help='LinkedIn source mode: hybrid (API first), browser (Playwright), or rapidapi (default: hybrid)'
+    )
+    parser.add_argument(
+        '--linkedin-api-pages',
+        type=int,
+        default=1,
+        help='Number of API pages to fetch in LinkedIn rapidapi mode (default: 1)'
+    )
+    parser.add_argument(
         '--linkedin-storage-state',
         type=str,
         default='linkedin_state.json',
@@ -179,7 +192,8 @@ def main():
         if args.enable_linkedin:
             print(
                 f"LinkedIn enabled: keywords='{args.linkedin_keywords}', "
-                f"location='{args.linkedin_location}', max_jobs={args.linkedin_max_jobs}"
+                f"location='{args.linkedin_location}', max_jobs={args.linkedin_max_jobs}, "
+                f"source={args.linkedin_source}, api_pages={args.linkedin_api_pages}"
             )
         print()
     
@@ -192,6 +206,8 @@ def main():
         linkedin_keywords=args.linkedin_keywords,
         linkedin_location=args.linkedin_location,
         linkedin_max_jobs=args.linkedin_max_jobs,
+        linkedin_source=args.linkedin_source,
+        linkedin_api_pages=args.linkedin_api_pages,
         linkedin_storage_state=args.linkedin_storage_state,
         dry_run=args.dry_run,
     )
