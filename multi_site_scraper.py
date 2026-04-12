@@ -16,6 +16,7 @@ This module re-exports everything so that existing callers remain unaffected:
 # ---------------------------------------------------------------------------
 from utils.experience import extract_years_of_experience  # noqa: F401
 from utils.keywords import extract_essential_keywords      # noqa: F401
+from utils.keywords import build_boolean_query_from_user_input  # noqa: F401
 from utils.job_utils import compute_job_id, validate_job_data, JOB_SCHEMA  # noqa: F401
 from utils.sites_loader import (  # noqa: F401
     normalize_site_type,
@@ -165,6 +166,8 @@ def run_multi_site_scraper(
     Returns:
         DataFrame of all scraped jobs, or ``None`` when nothing was scraped.
     """
+    linkedin_query = build_boolean_query_from_user_input(linkedin_keywords) or str(linkedin_keywords)
+
     sites: List[Dict] = [
         {
             'name': 'Amazon Jobs',
@@ -186,7 +189,7 @@ def run_multi_site_scraper(
             'type': 'linkedin',
             'url': (
                 f'https://www.linkedin.com/jobs/search/'
-                f'?keywords={quote_plus(linkedin_keywords)}'
+                f'?keywords={quote_plus(linkedin_query)}'
                 f'&location={quote_plus(linkedin_location)}'
             ),
             'enabled': linkedin_enabled,
@@ -194,7 +197,7 @@ def run_multi_site_scraper(
             'max_jobs': max(1, int(linkedin_max_jobs)),
             'source_mode': str(linkedin_source).lower().strip(),
             'api_pages': max(1, int(linkedin_api_pages)),
-            'keywords': linkedin_keywords,
+            'keywords': linkedin_query,
             'location': linkedin_location,
             'slow_mo_ms': 95,
         },

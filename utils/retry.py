@@ -45,12 +45,25 @@ def retry(max_attempts: int = 3, delay: float = 1.0):
                         if not did_headful_retry and hasattr(target, 'start_browser'):
                             did_headful_retry = True
                             logger.warning(
-                                'CAPTCHA/login wall detected. Retrying once in headful mode for manual solving.'
+                                'CAPTCHA/login wall detected. Refreshing session state and retrying once in headful mode.'
                             )
                             try:
+                                storage_state = str(
+                                    target.config.get('storage_state') or 'linkedin_state.json'
+                                )
+
+                                # Step 1: refresh persisted LinkedIn session from env creds when available.
+                                if hasattr(target, '_refresh_storage_state_from_env'):
+                                    try:
+                                        target._refresh_storage_state_from_env(storage_state)
+                                    except Exception as refresh_err:
+                                        logger.warning(
+                                            f'Failed to refresh LinkedIn state before headful retry: {refresh_err}'
+                                        )
+
+                                # Step 2: one headful retry for manual intervention.
                                 if hasattr(target, 'close_browser'):
                                     target.close_browser()
-                                storage_state = target.config.get('storage_state')
                                 target.start_browser(headless=False, storage_state=storage_state)
                                 # Small pause to allow challenge rendering before retry.
                                 time.sleep(max(2.0, delay))
@@ -64,8 +77,13 @@ def retry(max_attempts: int = 3, delay: float = 1.0):
                                 did_api_switch = True
                                 target.config['source_mode'] = 'rapidapi'
                                 logger.warning(
-                                    'CAPTCHA persisted after headful retry. Switching to API mode.'
+                                    'CAPTCHA/login wall persisted after headful retry. Aborting browser path and switching to API mode.'
                                 )
+                                if hasattr(target, 'close_browser'):
+                                    try:
+                                        target.close_browser()
+                                    except Exception:
+                                        pass
                                 continue
 
                     if attempt == max_attempts:

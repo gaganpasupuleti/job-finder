@@ -7,6 +7,7 @@ from utils.keywords import (
     extract_essential_keywords,
     extract_keywords_structured,
     build_boolean_or_query,
+    build_boolean_query_from_user_input,
 )
 
 
@@ -110,3 +111,11 @@ class TestBooleanBuilder:
     def test_deduplicates_and_trims(self):
         query = build_boolean_or_query(['  Python  ', 'python', '', 'Service Now'])
         assert query == '("Python" OR "Service Now")'
+
+    def test_from_comma_separated_input(self):
+        query = build_boolean_query_from_user_input('Python, ServiceNow, Data Science')
+        assert query == '("Python" OR "ServiceNow" OR "Data Science")'
+
+    def test_from_pipe_separated_input(self):
+        query = build_boolean_query_from_user_input('Python|ServiceNow|Data Science')
+        assert query == '("Python" OR "ServiceNow" OR "Data Science")'

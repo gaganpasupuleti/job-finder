@@ -16,7 +16,7 @@ extract_keywords_structured(text, title='') -> list[dict]
 
 import re
 import logging
-from typing import List, Dict, Tuple
+from typing import Iterable, List, Dict, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -335,3 +335,22 @@ def build_boolean_or_query(job_titles: List[str]) -> str:
     if len(cleaned) == 1:
         return cleaned[0]
     return f"({' OR '.join(cleaned)})"
+
+
+def build_boolean_query_from_user_input(skills: Union[str, Iterable[str]]) -> str:
+    """Build a boolean query from user-provided skills input.
+
+    Accepts either:
+    - Comma/pipe/newline-separated string, or
+    - Iterable of strings.
+    """
+    if skills is None:
+        return ''
+
+    if isinstance(skills, str):
+        raw = skills.replace('|', ',').replace('\n', ',')
+        tokens = [part.strip() for part in raw.split(',') if part.strip()]
+    else:
+        tokens = [str(item or '').strip() for item in skills if str(item or '').strip()]
+
+    return build_boolean_or_query(tokens)

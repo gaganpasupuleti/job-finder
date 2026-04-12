@@ -3,7 +3,6 @@
 import logging
 import os
 import random
-import time
 from typing import Dict, List
 from urllib.parse import urlencode
 
@@ -11,8 +10,8 @@ import requests
 
 from scrapers.base import JobSiteScraper
 from utils.experience import extract_years_of_experience
-from utils.keywords import extract_essential_keywords
-from utils.job_utils import compute_job_id
+from utils.keywords import extract_essential_keywords, build_boolean_query_from_user_input
+from utils.job_utils import compute_job_id, JOB_SCHEMA
 from utils.salary import extract_salary
 from utils.work_mode import detect_work_mode
 
@@ -47,7 +46,8 @@ class LinkedInScraper(JobSiteScraper):
     ) -> Dict:
         combined = f"{minimum_requirements} {job_description}".strip()
         job_id_source = link or f"{title}|{company}|{location}|{posted}"
-        return {
+        row = {key: '' for key in JOB_SCHEMA}
+        row.update({
             'Job ID': compute_job_id(job_id_source),
             'Job Link': str(link or '').strip(),
             'Title': str(title or '').strip(),
@@ -62,7 +62,8 @@ class LinkedInScraper(JobSiteScraper):
             'Salary Range': extract_salary(combined),
             'Work Mode': detect_work_mode(combined, location),
             'Source': 'LinkedIn',
-        }
+        })
+        return row
 
     def _is_login_wall(self) -> bool:
         try:
@@ -99,7 +100,7 @@ class LinkedInScraper(JobSiteScraper):
                 page.fill('input[name="session_key"]', user)
                 page.fill('input[name="session_password"]', pwd)
                 page.click('button[type="submit"]')
-                page.wait_for_timeout(4500)
+                page.wait_for_timeout(random.randint(2000, 5000))
                 context.storage_state(path=output_path)
                 browser.close()
             logger.info(f"Refreshed LinkedIn storage_state at {output_path}")
@@ -248,8 +249,12 @@ class LinkedInScraper(JobSiteScraper):
             'Content-Type': 'application/json',
         }
 
-        keywords = str(self.config.get('keywords', 'software engineer'))
+        raw_keywords = str(self.config.get('keywords', 'software engineer'))
+        keywords = build_boolean_query_from_user_input(raw_keywords) or raw_keywords
         location = str(self.config.get('location', 'India'))
+
+        # Credit conservation: use one API request with a combined boolean query.
+        api_pages = 1
 
         jobs: List[Dict] = []
         seen_ids = set()
